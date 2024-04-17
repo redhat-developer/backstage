@@ -79,6 +79,10 @@ export class TaskManager implements TaskContext {
     private readonly auth?: AuthService,
   ) {}
 
+  get taskId() {
+    return this.task.taskId;
+  }
+
   get spec() {
     return this.task.spec;
   }
@@ -159,6 +163,30 @@ export class TaskManager implements TaskContext {
     this.isDone = true;
     if (this.heartbeatTimeoutId) {
       clearTimeout(this.heartbeatTimeoutId);
+    }
+    // Audit logs the output if success, and errors if failed
+    const auditLogEntry = {
+      timestamp: new Date().toISOString(),
+      actor: {
+        user_id: 'scaffolder-backend',
+      },
+      event_name: 'scaffolderTaskCompletion',
+      status: result === 'failed' ? 'failed' : 'success',
+      metadata: {
+        taskId: this.task.taskId,
+        ...metadata,
+      },
+    };
+    if (result === 'failed') {
+      this.logger.info(
+        `Scaffolding task with taskId: ${this.task.taskId} completed successfully`,
+        { ...auditLogEntry, isAuditLog: true },
+      );
+    } else {
+      this.logger.error(
+        `Scaffolding task with taskId: ${this.task.taskId} failed`,
+        { ...auditLogEntry, isAuditLog: true },
+      );
     }
   }
 
@@ -397,8 +425,42 @@ export class StorageTaskBroker implements TaskBroker {
                 'The task was cancelled because the task worker lost connection to the task broker',
             },
           });
+          const auditLogEntry = {
+            timestamp: new Date().toISOString(),
+            actor: {
+              user_id: 'scaffolder-backend',
+            },
+            event_name: 'scaffolderStaleTaskCancellation',
+            status: 'success',
+            metadata: {
+              taskId: task.taskId,
+            },
+          };
+          this.logger.info(
+            `Stale scaffolding task ${task.taskId} cancelled because the task worker lost connection to the task broker`,
+            { ...auditLogEntry, isAuditLog: true },
+          );
         } catch (error) {
-          this.logger.warn(`Failed to cancel task '${task.taskId}', ${error}`);
+          const auditLogEntry = {
+            timestamp: new Date().toISOString(),
+            actor: {
+              user_id: 'scaffolder-backend',
+            },
+            event_name: 'scaffolderStaleTaskCancellation',
+            status: 'failed',
+            metadata: {
+              taskId: task.taskId,
+              error: {
+                name: error.name,
+                message: error.message,
+                stack: error.stack,
+              },
+            },
+          };
+          this.logger.warn(`Failed to cancel task '${task.taskId}', ${error}`, {
+            ...auditLogEntry,
+            isAuditLog: true,
+          });
         }
       }),
     );

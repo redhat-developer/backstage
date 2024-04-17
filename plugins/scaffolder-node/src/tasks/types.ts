@@ -109,6 +109,7 @@ export type TaskBrokerDispatchOptions = {
  * @public
  */
 export interface TaskContext {
+  taskId: string;
   cancelSignal: AbortSignal;
   spec: TaskSpec;
   secrets?: TaskSecrets;

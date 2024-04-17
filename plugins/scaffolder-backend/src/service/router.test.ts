@@ -46,6 +46,10 @@ import {
   PermissionEvaluator,
 } from '@backstage/plugin-permission-common';
 import { mockCredentials, mockServices } from '@backstage/backend-test-utils';
+import * as uuid from 'uuid';
+
+jest.mock('uuid');
+const uuidSpy = jest.spyOn(uuid, 'v4');
 
 const mockAccess = jest.fn();
 
@@ -188,13 +192,14 @@ describe('createRouter', () => {
         database: createDatabase(),
       });
       taskBroker = new StorageTaskBroker(databaseTaskStore, logger, config);
-
+      jest.useFakeTimers({ advanceTimers: true });
+      jest.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
       jest.spyOn(taskBroker, 'dispatch');
       jest.spyOn(taskBroker, 'get');
       jest.spyOn(taskBroker, 'list');
       jest.spyOn(taskBroker, 'event$');
       loggerSpy = jest.spyOn(logger, 'info');
-
+      uuidSpy.mockReturnValue('a-random-id');
       const router = await createRouter({
         logger: logger,
         config: new ConfigReader({}),
@@ -239,6 +244,8 @@ describe('createRouter', () => {
 
     afterEach(() => {
       jest.resetAllMocks();
+      jest.restoreAllMocks();
+      jest.useRealTimers();
     });
 
     describe('GET /v2/actions', () => {
@@ -263,7 +270,28 @@ describe('createRouter', () => {
               storePath: 'https://github.com/backstage/backstage',
             },
           });
-
+        // TODO: add the expected validation error
+        const error: ValidationError[] = {};
+        const auditLogMeta = {
+          actor: {
+            client: undefined,
+            ip_address: '::ffff:127.0.0.1',
+            user_id: 'user:default/mock',
+          },
+          event_name: 'scaffolderTaskCreation',
+          isAuditLog: true,
+          metadata: {
+            taskId: 'a-random-id',
+            templateRef: 'template:default/create-react-app-template',
+          },
+          status: 'failed',
+          timestamp: '2024-01-01T00:00:00.020Z',
+        };
+        expect(loggerSpy).toHaveBeenCalledTimes(1);
+        expect(loggerSpy).toHaveBeenCalledWith(
+          'Scaffolding task for template:default/create-react-app-template creation attempt by ${userEntityRef} user:default/mock failed',
+          auditLogMeta,
+        );
         expect(response.status).toEqual(400);
       });
 
@@ -367,10 +395,30 @@ describe('createRouter', () => {
               requiredParameter2: 'required-value-2',
             },
           });
-
-        expect(loggerSpy).toHaveBeenCalledTimes(1);
-        expect(loggerSpy).toHaveBeenCalledWith(
+        const auditLogMeta = {
+          actor: {
+            client: undefined,
+            ip_address: '::ffff:127.0.0.1',
+            user_id: 'user:default/mock',
+          },
+          event_name: 'scaffolderTaskCreation',
+          isAuditLog: true,
+          metadata: {
+            taskId: 'a-random-id',
+            templateRef: 'template:default/create-react-app-template',
+          },
+          status: 'success',
+          timestamp: '2024-01-01T00:00:00.020Z',
+        };
+        expect(loggerSpy).toHaveBeenCalledTimes(2);
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
           'Scaffolding task for template:default/create-react-app-template created by user:default/mock',
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          2,
+          'Scaffolding task for template:default/create-react-app-template with taskId: a-random-id created by user:default/mock',
+          auditLogMeta,
         );
       });
     });
@@ -1133,7 +1181,7 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
             },
           });
 
-        expect(loggerSpy).toHaveBeenCalledTimes(1);
+        expect(loggerSpy).toHaveBeenCalledTimes(2);
         expect(loggerSpy).toHaveBeenCalledWith(
           'Scaffolding task for template:default/create-react-app-template created by user:default/mock',
         );

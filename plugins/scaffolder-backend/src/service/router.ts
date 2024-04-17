@@ -89,6 +89,7 @@ import {
   IdentityApiGetIdentityRequest,
 } from '@backstage/plugin-auth-node';
 import { InternalTaskSecrets } from '../scaffolder/tasks/types';
+import { resourceLimits } from 'worker_threads';
 
 /**
  *
@@ -476,12 +477,6 @@ export async function createRouter(
         ? await catalogClient.getEntityByRef(userEntityRef, { token })
         : undefined;
 
-      let auditLog = `Scaffolding task for ${templateRef}`;
-      if (userEntityRef) {
-        auditLog += ` created by ${userEntityRef}`;
-      }
-      logger.info(auditLog);
-
       const values = req.body.values;
 
       const template = await authorizeTemplate(
@@ -495,6 +490,24 @@ export async function createRouter(
 
         if (!result.valid) {
           res.status(400).json({ errors: result.errors });
+          const auditLogEntry = {
+            timestamp: new Date().toISOString(),
+            actor: {
+              user_id: userEntityRef,
+              client: req.get('user-agent'),
+              ip_address: req.ip,
+            },
+            event_name: 'scaffolderTaskCreation',
+            status: 'failed',
+            metadata: {
+              templateRef: templateRef,
+              error: result.errors,
+            },
+          };
+          logger.info(
+            `Scaffolding task for ${templateRef} creation attempt by ${userEntityRef} failed`,
+            { ...auditLogEntry, isAuditLog: true },
+          );
           return;
         }
       }
@@ -536,6 +549,31 @@ export async function createRouter(
         secrets,
       });
 
+      let auditLog = `Scaffolding task for ${templateRef}`;
+      if (userEntityRef) {
+        auditLog += ` created by ${userEntityRef}`;
+      }
+
+      logger.info(auditLog);
+      const auditLogEntry = {
+        timestamp: new Date().toISOString(),
+        actor: {
+          user_id: userEntityRef,
+          client: req.get('user-agent'),
+          ip_address: req.ip,
+        },
+        event_name: 'scaffolderTaskCreation',
+        status: 'success',
+        metadata: {
+          taskId: result.taskId,
+          templateRef: templateRef,
+        },
+      };
+      logger.info(
+        `Scaffolding task for ${templateRef} with taskId: ${result.taskId} created by ${userEntityRef}`,
+        { ...auditLogEntry, isAuditLog: true },
+      );
+
       res.status(201).json({ id: result.taskId });
     })
     .get('/v2/tasks', async (req, res) => {
@@ -572,7 +610,42 @@ export async function createRouter(
     })
     .post('/v2/tasks/:taskId/cancel', async (req, res) => {
       const { taskId } = req.params;
+
+      // FIXME: this was added just to populate userEntityRef for now. This will need to be modified to restrict this endpoint.
+      const credentials = await httpAuth.credentials(req);
+      const { token } = await auth.getPluginRequestToken({
+        onBehalfOf: credentials,
+        targetPluginId: 'catalog',
+      });
+
+      const userEntityRef = auth.isPrincipal(credentials, 'user')
+        ? credentials.principal.userEntityRef
+        : undefined;
+
+      const userEntity = userEntityRef
+        ? await catalogClient.getEntityByRef(userEntityRef, { token })
+        : undefined;
+
       await taskBroker.cancel?.(taskId);
+
+      const auditLogEntry = {
+        timestamp: new Date().toISOString(),
+        actor: {
+          user_id: userEntityRef,
+          client: req.get('user-agent'),
+          ip_address: req.ip,
+        },
+        event_name: 'scaffolderTaskCancellation',
+        status: 'success',
+        metadata: {
+          taskId,
+        },
+      };
+      logger.info(
+        `Scaffolding task with taskId: ${taskId} was cancelled by ${userEntityRef}`,
+        { ...auditLogEntry, isAuditLog: true },
+      );
+
       res.status(200).json({ status: 'cancelled' });
     })
     .get('/v2/tasks/:taskId/eventstream', async (req, res) => {
