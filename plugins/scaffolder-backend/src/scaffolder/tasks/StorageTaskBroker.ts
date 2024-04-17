@@ -178,13 +178,13 @@ export class TaskManager implements TaskContext {
       },
     };
     if (result === 'failed') {
-      this.logger.info(
-        `Scaffolding task with taskId: ${this.task.taskId} completed successfully`,
+      this.logger.error(
+        `Scaffolding task with taskId: ${this.task.taskId} failed`,
         { ...auditLogEntry, isAuditLog: true },
       );
     } else {
-      this.logger.error(
-        `Scaffolding task with taskId: ${this.task.taskId} failed`,
+      this.logger.info(
+        `Scaffolding task with taskId: ${this.task.taskId} completed successfully`,
         { ...auditLogEntry, isAuditLog: true },
       );
     }
