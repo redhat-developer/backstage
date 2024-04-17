@@ -46,6 +46,11 @@ import {
   PermissionEvaluator,
 } from '@backstage/plugin-permission-common';
 import { mockCredentials, mockServices } from '@backstage/backend-test-utils';
+import * as uuid from 'uuid';
+import { DefaultAuditLogger } from '../util/auditLogging';
+
+jest.mock('uuid');
+const uuidSpy = jest.spyOn(uuid, 'v4');
 
 const mockAccess = jest.fn();
 
@@ -85,6 +90,7 @@ const config = new ConfigReader({});
 describe('createRouter', () => {
   let app: express.Express;
   let loggerSpy: jest.SpyInstance;
+  let loggerErrorSpy: jest.SpyInstance;
   let taskBroker: TaskBroker;
   const catalogClient = { getEntityByRef: jest.fn() } as unknown as CatalogApi;
   const permissionApi = {
@@ -181,20 +187,62 @@ describe('createRouter', () => {
     },
   };
 
+  const commonAuditLogMeta = {
+    actor: {
+      ip: '::ffff:127.0.0.1',
+      actorId: 'user:default/mock',
+      hostname: '127.0.0.1',
+    },
+    request: {
+      body: {},
+      method: 'GET',
+      params: {},
+      query: {},
+    },
+    isAuditLog: true,
+    meta: {},
+    status: 'succeeded',
+  };
+
+  const commonAuditErrorMeta = {
+    ...commonAuditLogMeta,
+    status: 'failed',
+    stage: 'completion',
+    errors: [],
+  };
   describe('not providing an identity api', () => {
     beforeEach(async () => {
       const logger = getVoidLogger();
       const databaseTaskStore = await DatabaseTaskStore.create({
         database: createDatabase(),
       });
-      taskBroker = new StorageTaskBroker(databaseTaskStore, logger, config);
 
+      const auditLogger = new DefaultAuditLogger({
+        logger,
+        authService: mockServices.auth({
+          pluginId: 'scaffolder',
+          disableDefaultAuthPolicy: false,
+        }),
+        httpAuthService: mockServices.httpAuth({
+          pluginId: 'scaffolder',
+          defaultCredentials: mockCredentials.user(),
+        }),
+      });
+
+      taskBroker = new StorageTaskBroker(
+        databaseTaskStore,
+        logger,
+        auditLogger,
+        config,
+      );
       jest.spyOn(taskBroker, 'dispatch');
       jest.spyOn(taskBroker, 'get');
       jest.spyOn(taskBroker, 'list');
       jest.spyOn(taskBroker, 'event$');
       loggerSpy = jest.spyOn(logger, 'info');
+      loggerErrorSpy = jest.spyOn(logger, 'error');
 
+      uuidSpy.mockReturnValue('a-random-id');
       const router = await createRouter({
         logger: logger,
         config: new ConfigReader({}),
@@ -239,6 +287,7 @@ describe('createRouter', () => {
 
     afterEach(() => {
       jest.resetAllMocks();
+      jest.restoreAllMocks();
     });
 
     describe('GET /v2/actions', () => {
@@ -247,24 +296,129 @@ describe('createRouter', () => {
         expect(response.status).toEqual(200);
         expect(response.body[0].id).toBeDefined();
         expect(response.body.length).toBeGreaterThan(8);
+
+        const auditInitiationLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderInstalledActionsFetch',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: '/v2/actions',
+          },
+          stage: 'initiation',
+        };
+        const auditCompletionLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderInstalledActionsFetch',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: '/v2/actions',
+          },
+          response: {
+            status: 200,
+            body: response.body,
+          },
+          stage: 'completion',
+        };
+        expect(loggerSpy).toHaveBeenCalledTimes(2);
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
+          'user:default/mock requested the list of installed actions',
+          auditInitiationLogMeta,
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          2,
+          'user:default/mock successfully requested the list of installed actions',
+          auditCompletionLogMeta,
+        );
       });
     });
 
     describe('POST /v2/tasks', () => {
       it('rejects template values which do not match the template schema definition', async () => {
-        const response = await request(app)
-          .post('/v2/tasks')
-          .send({
-            templateRef: stringifyEntityRef({
-              kind: 'template',
-              name: 'create-react-app-template',
-            }),
-            values: {
+        const requestBody = {
+          templateRef: stringifyEntityRef({
+            kind: 'template',
+            name: 'create-react-app-template',
+          }),
+          values: {
+            storePath: 'https://github.com/backstage/backstage',
+          },
+        };
+        const response = await request(app).post('/v2/tasks').send(requestBody);
+        const error = [
+          {
+            argument: 'requiredParameter1',
+            instance: {
               storePath: 'https://github.com/backstage/backstage',
             },
-          });
+            message: 'requires property "requiredParameter1"',
+            name: 'required',
+            path: [],
+            property: 'instance',
+            schema: {
+              properties: {
+                requiredParameter1: {
+                  description: 'Required parameter 1',
+                  type: 'string',
+                },
+              },
+              required: ['requiredParameter1'],
+              type: 'object',
+            },
+            stack: 'instance requires property "requiredParameter1"',
+          },
+        ];
+        const auditInitiationLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskCreation',
+          meta: {
+            templateRef: 'template:default/create-react-app-template',
+          },
+          request: {
+            ...commonAuditLogMeta.request,
+            body: requestBody,
+            method: 'POST',
+            url: '/v2/tasks',
+          },
+          stage: 'initiation',
+        };
+        expect(loggerSpy).toHaveBeenCalledTimes(1);
+        expect(loggerSpy).toHaveBeenCalledWith(
+          'Scaffolding task for template:default/create-react-app-template creation attempt by user:default/mock initiated',
+          auditInitiationLogMeta,
+        );
 
+        const auditErrorLogMeta = {
+          ...commonAuditErrorMeta,
+          eventName: 'ScaffolderTaskCreation',
+          meta: {
+            templateRef: 'template:default/create-react-app-template',
+          },
+          request: {
+            ...commonAuditLogMeta.request,
+            body: requestBody,
+            method: 'POST',
+            url: '/v2/tasks',
+          },
+          response: {
+            status: 400,
+            body: { errors: error },
+          },
+          errors: [
+            {
+              name: error[0].name,
+              message: error[0].message,
+              stack: error[0].stack,
+            },
+          ],
+        };
+        expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+        expect(loggerErrorSpy).toHaveBeenCalledWith(
+          'Scaffolding task for template:default/create-react-app-template creation attempt by user:default/mock failed',
+          auditErrorLogMeta,
+        );
         expect(response.status).toEqual(400);
+        expect(response.body).toEqual({ errors: error });
       });
 
       it('return the template id', async () => {
@@ -274,19 +428,17 @@ describe('createRouter', () => {
           taskId: 'a-random-id',
         });
 
-        const response = await request(app)
-          .post('/v2/tasks')
-          .send({
-            templateRef: stringifyEntityRef({
-              kind: 'template',
-              name: 'create-react-app-template',
-            }),
-            values: {
-              requiredParameter1: 'required-value-1',
-              requiredParameter2: 'required-value-2',
-            },
-          });
-
+        const requestBody = {
+          templateRef: stringifyEntityRef({
+            kind: 'template',
+            name: 'create-react-app-template',
+          }),
+          values: {
+            requiredParameter1: 'required-value-1',
+            requiredParameter2: 'required-value-2',
+          },
+        };
+        const response = await request(app).post('/v2/tasks').send(requestBody);
         expect(response.status).toEqual(201);
         expect(response.body.id).toBe('a-random-id');
       });
@@ -353,24 +505,177 @@ describe('createRouter', () => {
 
       it('should emit auditlog containing user identifier when backstage auth is passed', async () => {
         const mockToken = mockCredentials.user.token();
-
+        const templateParameters = {
+          requiredParameter1: 'required-value-1',
+          requiredParameter2: 'required-value-2',
+        };
+        const requestBody = {
+          templateRef: stringifyEntityRef({
+            kind: 'template',
+            name: 'create-react-app-template',
+          }),
+          values: templateParameters,
+        };
         await request(app)
           .post('/v2/tasks')
           .set('Authorization', `Bearer ${mockToken}`)
-          .send({
-            templateRef: stringifyEntityRef({
-              kind: 'template',
-              name: 'create-react-app-template',
-            }),
-            values: {
-              requiredParameter1: 'required-value-1',
-              requiredParameter2: 'required-value-2',
-            },
-          });
+          .send(requestBody);
+        expect(loggerSpy).toHaveBeenCalledTimes(4);
+        const auditInitiationLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskCreation',
+          meta: {
+            templateRef: 'template:default/create-react-app-template',
+          },
+          request: {
+            ...commonAuditLogMeta.request,
+            body: requestBody,
+            method: 'POST',
+            url: '/v2/tasks',
+          },
+          stage: 'initiation',
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
+          'Scaffolding task for template:default/create-react-app-template creation attempt by user:default/mock initiated',
+          auditInitiationLogMeta,
+        );
 
-        expect(loggerSpy).toHaveBeenCalledTimes(1);
-        expect(loggerSpy).toHaveBeenCalledWith(
+        const auditSuccessLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskCreation',
+          meta: {
+            taskId: 'a-random-id',
+            templateRef: 'template:default/create-react-app-template',
+          },
+          request: {
+            ...commonAuditLogMeta.request,
+            body: requestBody,
+            method: 'POST',
+            url: '/v2/tasks',
+          },
+          response: {
+            status: 201,
+            body: { id: 'a-random-id' },
+          },
+          stage: 'completion',
+        };
+        const auditLogTaskInitMeta = {
+          actor: {
+            actorId: 'scaffolder-backend',
+          },
+          eventName: 'ScaffolderTaskExecution',
+          isAuditLog: true,
+          meta: {
+            taskId: 'a-random-id',
+            templateRef: 'template:default/create-react-app-template',
+            taskParameters: templateParameters,
+          },
+          stage: 'initiation',
+          status: 'succeeded',
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          2,
           'Scaffolding task for template:default/create-react-app-template created by user:default/mock',
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          3,
+          'Scaffolding task for template:default/create-react-app-template with taskId: a-random-id successfully created by user:default/mock',
+          auditSuccessLogMeta,
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          4,
+          'Scaffolding task with taskId: a-random-id initiated',
+          auditLogTaskInitMeta,
+        );
+      });
+      it('should redact secrets in the request body in the audit log', async () => {
+        const mockToken = mockCredentials.user.token();
+        const broker =
+          taskBroker.dispatch as jest.Mocked<TaskBroker>['dispatch'];
+        broker.mockResolvedValue({
+          taskId: 'a-random-id',
+        });
+        const requestBody = {
+          templateRef: stringifyEntityRef({
+            kind: 'template',
+            name: 'create-react-app-template',
+          }),
+          values: {
+            requiredParameter1: 'required-value-1',
+            requiredParameter2: 'required-value-2',
+            password: '************',
+            token: '************',
+          },
+          secrets: {
+            password: 'super-secret',
+            token: 'access-token',
+          },
+        };
+        await request(app)
+          .post('/v2/tasks')
+          .set('Authorization', `Bearer ${mockToken}`)
+          .send(requestBody);
+        expect(loggerSpy).toHaveBeenCalledTimes(3);
+        const auditInitiationLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskCreation',
+          meta: {
+            templateRef: 'template:default/create-react-app-template',
+          },
+          request: {
+            ...commonAuditLogMeta.request,
+            body: {
+              ...requestBody,
+              secrets: {
+                password: '***',
+                token: '***',
+              },
+            },
+            method: 'POST',
+            url: '/v2/tasks',
+          },
+          stage: 'initiation',
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
+          'Scaffolding task for template:default/create-react-app-template creation attempt by user:default/mock initiated',
+          auditInitiationLogMeta,
+        );
+
+        const auditSuccessLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskCreation',
+          meta: {
+            taskId: 'a-random-id',
+            templateRef: 'template:default/create-react-app-template',
+          },
+          request: {
+            ...commonAuditLogMeta.request,
+            body: {
+              ...requestBody,
+              secrets: {
+                password: '***',
+                token: '***',
+              },
+            },
+            method: 'POST',
+            url: '/v2/tasks',
+          },
+          response: {
+            status: 201,
+            body: { id: 'a-random-id' },
+          },
+          stage: 'completion',
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          2,
+          'Scaffolding task for template:default/create-react-app-template created by user:default/mock',
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          3,
+          'Scaffolding task for template:default/create-react-app-template with taskId: a-random-id successfully created by user:default/mock',
+          auditSuccessLogMeta,
         );
       });
     });
@@ -691,17 +996,34 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
   describe('providing an identity api', () => {
     beforeEach(async () => {
       const logger = getVoidLogger();
+      const auditLogger = new DefaultAuditLogger({
+        logger,
+        authService: mockServices.auth({
+          pluginId: 'scaffolder',
+          disableDefaultAuthPolicy: false,
+        }),
+        httpAuthService: mockServices.httpAuth({
+          pluginId: 'scaffolder',
+          defaultCredentials: mockCredentials.user(),
+        }),
+      });
       const databaseTaskStore = await DatabaseTaskStore.create({
         database: createDatabase(),
       });
-      taskBroker = new StorageTaskBroker(databaseTaskStore, logger, config);
-
+      taskBroker = new StorageTaskBroker(
+        databaseTaskStore,
+        logger,
+        auditLogger,
+        config,
+      );
       jest.spyOn(taskBroker, 'dispatch');
       jest.spyOn(taskBroker, 'get');
       jest.spyOn(taskBroker, 'list');
       jest.spyOn(taskBroker, 'event$');
       loggerSpy = jest.spyOn(logger, 'info');
+      loggerErrorSpy = jest.spyOn(logger, 'error');
 
+      uuidSpy.mockReturnValue('a-random-id');
       const router = await createRouter({
         logger: logger,
         config: new ConfigReader({}),
@@ -745,6 +1067,7 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
 
     afterEach(() => {
       jest.resetAllMocks();
+      jest.restoreAllMocks();
     });
 
     describe('GET /v2/actions', () => {
@@ -753,19 +1076,46 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
         expect(response.status).toEqual(200);
         expect(response.body[0].id).toBeDefined();
         expect(response.body.length).toBeGreaterThan(8);
+
+        const auditInitiationLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderInstalledActionsFetch',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: '/v2/actions',
+          },
+          stage: 'initiation',
+        };
+        const auditCompletionLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderInstalledActionsFetch',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: '/v2/actions',
+          },
+          response: {
+            status: 200,
+            body: response.body,
+          },
+          stage: 'completion',
+        };
+        expect(loggerSpy).toHaveBeenCalledTimes(2);
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
+          'user:default/mock requested the list of installed actions',
+          auditInitiationLogMeta,
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          2,
+          'user:default/mock successfully requested the list of installed actions',
+          auditCompletionLogMeta,
+        );
       });
     });
 
     describe('GET /v2/templates/:namespace/:kind/:name/parameter-schema', () => {
       it('returns the parameter schema', async () => {
-        const response = await request(app)
-          .get(
-            '/v2/templates/default/Template/create-react-app-template/parameter-schema',
-          )
-          .send();
-
-        expect(response.status).toEqual(200);
-        expect(response.body).toEqual({
+        const expectedResponseBody = {
           title: 'Create React App Template',
           description: 'Create a new CRA website project',
           steps: [
@@ -799,7 +1149,65 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
               },
             },
           ],
-        });
+        };
+        const response = await request(app)
+          .get(
+            '/v2/templates/default/Template/create-react-app-template/parameter-schema',
+          )
+          .send();
+
+        expect(response.status).toEqual(200);
+        expect(response.body).toEqual(expectedResponseBody);
+
+        expect(loggerSpy).toHaveBeenCalledTimes(2);
+        const auditLogInitMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderParameterSchemaFetch',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: `/v2/templates/default/Template/create-react-app-template/parameter-schema`,
+            params: {
+              kind: 'Template',
+              namespace: 'default',
+              name: 'create-react-app-template',
+            },
+          },
+          meta: {
+            templateRef: 'Template:default/create-react-app-template',
+          },
+          stage: 'initiation',
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
+          'user:default/mock requested the parameter schema for Template:default/create-react-app-template',
+          auditLogInitMeta,
+        );
+        const auditLogCompletionMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderParameterSchemaFetch',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: `/v2/templates/default/Template/create-react-app-template/parameter-schema`,
+            params: {
+              kind: 'Template',
+              namespace: 'default',
+              name: 'create-react-app-template',
+            },
+          },
+          response: {
+            status: 200,
+            body: expectedResponseBody,
+          },
+          meta: {
+            templateRef: 'Template:default/create-react-app-template',
+          },
+          stage: 'completion',
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          2,
+          'user:default/mock successfully requested the parameter schema for Template:default/create-react-app-template',
+          auditLogCompletionMeta,
+        );
       });
 
       it('filters parameters that the user is not authorized to see', async () => {
@@ -877,18 +1285,89 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
 
     describe('POST /v2/tasks', () => {
       it('rejects template values which do not match the template schema definition', async () => {
-        const response = await request(app)
-          .post('/v2/tasks')
-          .send({
-            templateRef: stringifyEntityRef({
-              kind: 'template',
-              name: 'create-react-app-template',
-            }),
-            values: {
+        const requestBody = {
+          templateRef: stringifyEntityRef({
+            kind: 'template',
+            name: 'create-react-app-template',
+          }),
+          values: {
+            storePath: 'https://github.com/backstage/backstage',
+          },
+        };
+        const response = await request(app).post('/v2/tasks').send(requestBody);
+        const error = [
+          {
+            argument: 'requiredParameter1',
+            instance: {
               storePath: 'https://github.com/backstage/backstage',
             },
-          });
+            message: 'requires property "requiredParameter1"',
+            name: 'required',
+            path: [],
+            property: 'instance',
+            schema: {
+              properties: {
+                requiredParameter1: {
+                  description: 'Required parameter 1',
+                  type: 'string',
+                },
+              },
+              required: ['requiredParameter1'],
+              type: 'object',
+            },
+            stack: 'instance requires property "requiredParameter1"',
+          },
+        ];
 
+        const auditInitiationLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskCreation',
+          meta: {
+            templateRef: 'template:default/create-react-app-template',
+          },
+          request: {
+            ...commonAuditLogMeta.request,
+            body: requestBody,
+            method: 'POST',
+            url: '/v2/tasks',
+          },
+          stage: 'initiation',
+        };
+        expect(loggerSpy).toHaveBeenCalledTimes(1);
+        expect(loggerSpy).toHaveBeenCalledWith(
+          'Scaffolding task for template:default/create-react-app-template creation attempt by user:default/mock initiated',
+          auditInitiationLogMeta,
+        );
+
+        const auditErrorLogMeta = {
+          ...commonAuditErrorMeta,
+          eventName: 'ScaffolderTaskCreation',
+          meta: {
+            templateRef: 'template:default/create-react-app-template',
+          },
+          request: {
+            ...commonAuditLogMeta.request,
+            body: requestBody,
+            method: 'POST',
+            url: '/v2/tasks',
+          },
+          response: {
+            status: 400,
+            body: { errors: error },
+          },
+          errors: [
+            {
+              name: error[0].name,
+              message: error[0].message,
+              stack: error[0].stack,
+            },
+          ],
+        };
+        expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+        expect(loggerErrorSpy).toHaveBeenCalledWith(
+          'Scaffolding task for template:default/create-react-app-template creation attempt by user:default/mock failed',
+          auditErrorLogMeta,
+        );
         expect(response.status).toEqual(400);
       });
 
@@ -1120,22 +1599,178 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
       });
 
       it('should emit auditlog containing user identifier when backstage auth is passed', async () => {
+        const mockToken = mockCredentials.user.token();
+        const templateParameters = {
+          requiredParameter1: 'required-value-1',
+          requiredParameter2: 'required-value-2',
+        };
+        const requestBody = {
+          templateRef: stringifyEntityRef({
+            kind: 'template',
+            name: 'create-react-app-template',
+          }),
+          values: templateParameters,
+        };
         await request(app)
           .post('/v2/tasks')
-          .send({
-            templateRef: stringifyEntityRef({
-              kind: 'template',
-              name: 'create-react-app-template',
-            }),
-            values: {
-              requiredParameter1: 'required-value-1',
-              requiredParameter2: 'required-value-2',
-            },
-          });
+          .set('Authorization', `Bearer ${mockToken}`)
+          .send(requestBody);
+        expect(loggerSpy).toHaveBeenCalledTimes(4);
+        const auditInitiationLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskCreation',
+          meta: {
+            templateRef: 'template:default/create-react-app-template',
+          },
+          request: {
+            ...commonAuditLogMeta.request,
+            body: requestBody,
+            method: 'POST',
+            url: '/v2/tasks',
+          },
+          stage: 'initiation',
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
+          'Scaffolding task for template:default/create-react-app-template creation attempt by user:default/mock initiated',
+          auditInitiationLogMeta,
+        );
 
-        expect(loggerSpy).toHaveBeenCalledTimes(1);
-        expect(loggerSpy).toHaveBeenCalledWith(
+        const auditSuccessLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskCreation',
+          meta: {
+            taskId: 'a-random-id',
+            templateRef: 'template:default/create-react-app-template',
+          },
+          request: {
+            ...commonAuditLogMeta.request,
+            body: requestBody,
+            method: 'POST',
+            url: '/v2/tasks',
+          },
+          response: {
+            status: 201,
+            body: { id: 'a-random-id' },
+          },
+          stage: 'completion',
+        };
+        const auditLogTaskInitMeta = {
+          actor: {
+            actorId: 'scaffolder-backend',
+          },
+          eventName: 'ScaffolderTaskExecution',
+          isAuditLog: true,
+          meta: {
+            taskId: 'a-random-id',
+            templateRef: 'template:default/create-react-app-template',
+            taskParameters: templateParameters,
+          },
+          stage: 'initiation',
+          status: 'succeeded',
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          2,
           'Scaffolding task for template:default/create-react-app-template created by user:default/mock',
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          3,
+          'Scaffolding task for template:default/create-react-app-template with taskId: a-random-id successfully created by user:default/mock',
+          auditSuccessLogMeta,
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          4,
+          'Scaffolding task with taskId: a-random-id initiated',
+          auditLogTaskInitMeta,
+        );
+      });
+      it('should redact secrets in the request body in the audit log', async () => {
+        const mockToken = mockCredentials.user.token();
+        const broker =
+          taskBroker.dispatch as jest.Mocked<TaskBroker>['dispatch'];
+        broker.mockResolvedValue({
+          taskId: 'a-random-id',
+        });
+        const requestBody = {
+          templateRef: stringifyEntityRef({
+            kind: 'template',
+            name: 'create-react-app-template',
+          }),
+          values: {
+            requiredParameter1: 'required-value-1',
+            requiredParameter2: 'required-value-2',
+            password: '************',
+            token: '************',
+          },
+          secrets: {
+            password: 'super-secret',
+            token: 'access-token',
+          },
+        };
+        await request(app)
+          .post('/v2/tasks')
+          .set('Authorization', `Bearer ${mockToken}`)
+          .send(requestBody);
+        expect(loggerSpy).toHaveBeenCalledTimes(3);
+        const auditInitiationLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskCreation',
+          meta: {
+            templateRef: 'template:default/create-react-app-template',
+          },
+          request: {
+            ...commonAuditLogMeta.request,
+            body: {
+              ...requestBody,
+              secrets: {
+                password: '***',
+                token: '***',
+              },
+            },
+            method: 'POST',
+            url: '/v2/tasks',
+          },
+          stage: 'initiation',
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
+          'Scaffolding task for template:default/create-react-app-template creation attempt by user:default/mock initiated',
+          auditInitiationLogMeta,
+        );
+
+        const auditSuccessLogMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskCreation',
+          meta: {
+            taskId: 'a-random-id',
+            templateRef: 'template:default/create-react-app-template',
+          },
+          request: {
+            ...commonAuditLogMeta.request,
+            body: {
+              ...requestBody,
+              secrets: {
+                password: '***',
+                token: '***',
+              },
+            },
+            method: 'POST',
+            url: '/v2/tasks',
+          },
+          response: {
+            status: 201,
+            body: { id: 'a-random-id' },
+          },
+          stage: 'completion',
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          2,
+          'Scaffolding task for template:default/create-react-app-template created by user:default/mock',
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          3,
+          'Scaffolding task for template:default/create-react-app-template with taskId: a-random-id successfully created by user:default/mock',
+          auditSuccessLogMeta,
         );
       });
     });
@@ -1160,18 +1795,54 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
         expect(taskBroker.list).toHaveBeenCalledWith({
           createdBy: undefined,
         });
-        expect(response.status).toEqual(200);
-        expect(response.body).toStrictEqual({
-          tasks: [
-            {
-              id: 'a-random-id',
-              spec: {} as any,
-              status: 'completed',
-              createdAt: '',
-              createdBy: '',
-            },
-          ],
-        });
+
+        const expectedResponse = {
+          status: 200,
+          body: {
+            tasks: [
+              {
+                id: 'a-random-id',
+                spec: {} as any,
+                status: 'completed',
+                createdAt: '',
+                createdBy: '',
+              },
+            ],
+          },
+        };
+        expect(response.status).toEqual(expectedResponse.status);
+        expect(response.body).toStrictEqual(expectedResponse.body);
+
+        expect(loggerSpy).toHaveBeenCalledTimes(2);
+        const auditLogInitMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskListFetch',
+          stage: 'initiation',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: '/v2/tasks',
+          },
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
+          'user:default/mock requested for the list of scaffolder tasks',
+          auditLogInitMeta,
+        );
+        const auditLogCompletionMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskListFetch',
+          stage: 'completion',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: '/v2/tasks',
+          },
+          response: expectedResponse,
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          2,
+          'user:default/mock successfully requested for the list of scaffolder tasks',
+          auditLogCompletionMeta,
+        );
       });
 
       it('return filtered tasks', async () => {
@@ -1310,6 +1981,47 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
           taskId: 'a-random-id',
         });
         expect(subscriber!.closed).toBe(true);
+        expect(loggerSpy).toHaveBeenCalledTimes(2);
+        const auditLogInitMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskStream',
+          stage: 'initiation',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: '/v2/tasks/a-random-id/eventstream',
+            params: {
+              taskId: 'a-random-id',
+            },
+          },
+          meta: {
+            taskId: 'a-random-id',
+          },
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
+          'Event stream for scaffolding task with taskId: a-random-id was opened by user:default/mock',
+          auditLogInitMeta,
+        );
+        const auditLogCompletionMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskStream',
+          stage: 'completion',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: '/v2/tasks/a-random-id/eventstream',
+            params: {
+              taskId: 'a-random-id',
+            },
+          },
+          meta: {
+            taskId: 'a-random-id',
+          },
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          2,
+          'Event stream observing scaffolding task with taskId: a-random-id was closed by user:default/mock',
+          auditLogCompletionMeta,
+        );
       });
 
       it('should return log messages with after query', async () => {
@@ -1400,29 +2112,76 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
 
         const response = await request(app).get('/v2/tasks/a-random-id/events');
 
-        expect(response.status).toEqual(200);
-        expect(response.body).toEqual([
-          {
-            id: 0,
-            taskId: 'a-random-id',
-            type: 'log',
-            createdAt: '',
-            body: { message: 'My log message' },
-          },
-          {
-            id: 1,
-            taskId: 'a-random-id',
-            type: 'completion',
-            createdAt: '',
-            body: { message: 'Finished!' },
-          },
-        ]);
+        const expectedResponse = {
+          status: 200,
+          body: [
+            {
+              id: 0,
+              taskId: 'a-random-id',
+              type: 'log',
+              createdAt: '',
+              body: { message: 'My log message' },
+            },
+            {
+              id: 1,
+              taskId: 'a-random-id',
+              type: 'completion',
+              createdAt: '',
+              body: { message: 'Finished!' },
+            },
+          ],
+        };
+        expect(response.status).toEqual(expectedResponse.status);
+        expect(response.body).toEqual(expectedResponse.body);
 
         expect(taskBroker.event$).toHaveBeenCalledTimes(1);
         expect(taskBroker.event$).toHaveBeenCalledWith({
           taskId: 'a-random-id',
         });
         expect(subscriber!.closed).toBe(true);
+
+        expect(loggerSpy).toHaveBeenCalledTimes(2);
+        const auditLogInitMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskEventFetch',
+          stage: 'initiation',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: '/v2/tasks/a-random-id/events',
+            params: {
+              taskId: 'a-random-id',
+            },
+          },
+          meta: {
+            taskId: 'a-random-id',
+          },
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
+          'Task events fetch attempt for scaffolding task with taskId: a-random-id initiated by user:default/mock',
+          auditLogInitMeta,
+        );
+        const auditLogCompletionMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskEventFetch',
+          stage: 'completion',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: '/v2/tasks/a-random-id/events',
+            params: {
+              taskId: 'a-random-id',
+            },
+          },
+          meta: {
+            taskId: 'a-random-id',
+          },
+          response: expectedResponse,
+        };
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          2,
+          'Task events fetch attempt for scaffolding task with taskId: a-random-id by user:default/mock succeeded',
+          auditLogCompletionMeta,
+        );
       });
 
       it('should return log messages with after query', async () => {

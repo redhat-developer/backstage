@@ -37,8 +37,33 @@ import { RESOURCE_TYPE_SCAFFOLDER_ACTION } from '@backstage/plugin-scaffolder-co
 import {
   createMockDirectory,
   mockCredentials,
+  mockServices,
 } from '@backstage/backend-test-utils';
 import stripAnsi from 'strip-ansi';
+import { DefaultAuditLogger } from '../../util/auditLogging';
+
+const commonAuditLogMeta = {
+  status: 'succeeded',
+  isAuditLog: true,
+  actor: {
+    actorId: 'scaffolder-backend',
+  },
+};
+
+const commonAuditErrorMeta = {
+  ...commonAuditLogMeta,
+  status: 'failed',
+};
+
+const getError = async <TError>(call: () => unknown): Promise<TError> => {
+  try {
+    await call();
+
+    throw new Error('No Error Thrown');
+  } catch (error: unknown) {
+    return error as TError;
+  }
+};
 
 describe('NunjucksWorkflowRunner', () => {
   const logger = getVoidLogger();
@@ -46,6 +71,8 @@ describe('NunjucksWorkflowRunner', () => {
   let runner: NunjucksWorkflowRunner;
   let fakeActionHandler: jest.Mock;
   let fakeTaskLog: jest.Mock;
+  let loggerSpy: jest.SpyInstance;
+  let loggerErrorSpy: jest.SpyInstance;
 
   const mockDir = createMockDirectory();
 
@@ -68,11 +95,24 @@ describe('NunjucksWorkflowRunner', () => {
     targetPluginId: 'catalog',
   });
 
+  const auditLogger = new DefaultAuditLogger({
+    logger,
+    authService: mockServices.auth({
+      pluginId: 'scaffolder',
+      disableDefaultAuthPolicy: false,
+    }),
+    httpAuthService: mockServices.httpAuth({
+      pluginId: 'scaffolder',
+      defaultCredentials: mockCredentials.user(),
+    }),
+  });
+
   const createMockTaskWithSpec = (
     spec: TaskSpec,
     secrets?: TaskSecrets,
     isDryRun?: boolean,
   ): TaskContext => ({
+    taskId: 'a-random-id',
     spec,
     secrets,
     isDryRun,
@@ -92,8 +132,8 @@ describe('NunjucksWorkflowRunner', () => {
 
   beforeEach(() => {
     mockDir.clear();
-
-    jest.resetAllMocks();
+    loggerSpy = jest.spyOn(logger, 'info');
+    loggerErrorSpy = jest.spyOn(logger, 'error');
     actionRegistry = new TemplateActionRegistry();
     fakeActionHandler = jest.fn();
     fakeTaskLog = jest.fn();
@@ -175,7 +215,13 @@ describe('NunjucksWorkflowRunner', () => {
       workingDirectory: mockDir.path,
       logger,
       permissions: mockedPermissionApi,
+      auditLogger,
     });
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
+    jest.restoreAllMocks();
   });
 
   it('should throw an error if the action does not exist', async () => {
@@ -185,10 +231,36 @@ describe('NunjucksWorkflowRunner', () => {
       output: {},
       steps: [{ id: 'test', name: 'name', action: 'does-not-exist' }],
     });
-
-    await expect(runner.execute(task)).rejects.toThrow(
+    const error: Error = await getError(async () => runner.execute(task));
+    expect(error.message).toBe(
       "Template action with ID 'does-not-exist' is not registered.",
     );
+    const auditLogErrorMeta = {
+      ...commonAuditErrorMeta,
+      eventName: 'ScaffolderTaskStepExecution',
+      stage: 'completion',
+      meta: {
+        taskId: 'a-random-id',
+        isDryRun: false,
+        stepAction: 'does-not-exist',
+        stepId: 'test',
+        stepName: 'name',
+        templateRef: '',
+      },
+      errors: [
+        {
+          name: 'NotFoundError',
+          message:
+            "Template action with ID 'does-not-exist' is not registered.",
+          stack: error.stack,
+        },
+      ],
+    };
+    expect(loggerErrorSpy).toHaveBeenCalledWith(
+      `Step name (id: test) of task a-random-id failed`,
+      auditLogErrorMeta,
+    );
+    expect(loggerSpy).toHaveBeenCalledTimes(0);
   });
 
   describe('validation', () => {
@@ -199,9 +271,54 @@ describe('NunjucksWorkflowRunner', () => {
         output: {},
         steps: [{ id: 'test', name: 'name', action: 'jest-validated-action' }],
       });
+      const error: Error = await getError(async () => runner.execute(task));
 
-      await expect(runner.execute(task)).rejects.toThrow(
-        /Invalid input passed to action jest-validated-action, instance requires property "foo"/,
+      expect(error.message).toBe(
+        `Invalid input passed to action jest-validated-action, instance requires property "foo"`,
+      );
+      const auditLogErrorMeta = {
+        ...commonAuditErrorMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          taskId: 'a-random-id',
+          isDryRun: false,
+          stepAction: 'jest-validated-action',
+          stepId: 'test',
+          stepName: 'name',
+          templateRef: '',
+        },
+        errors: [
+          {
+            name: 'InputError',
+            message: `Invalid input passed to action jest-validated-action, instance requires property "foo"`,
+            stack: error.stack,
+          },
+        ],
+      };
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        `Step name (id: test) of task a-random-id failed`,
+        auditLogErrorMeta,
+      );
+      expect(loggerSpy).toHaveBeenCalledTimes(1);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-validated-action',
+          stepInputs: {},
+          isDryRun: false,
+        },
+      };
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        'Started name (id: test) of task a-random-id triggering the jest-validated-action action',
+        auditLogInitMeta,
       );
     });
 
@@ -235,9 +352,46 @@ describe('NunjucksWorkflowRunner', () => {
         ],
       });
 
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-zod-validated-action',
+          stepInputs: { foo: 1 },
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-zod-validated-action',
+          isDryRun: false,
+        },
+      };
       await runner.execute(task);
-
       expect(fakeActionHandler).toHaveBeenCalledTimes(1);
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started name (id: test) of task a-random-id triggering the jest-zod-validated-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step name (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
+      );
     });
 
     it('should run the action when the validation passes', async () => {
@@ -255,9 +409,46 @@ describe('NunjucksWorkflowRunner', () => {
         ],
       });
 
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-validated-action',
+          stepInputs: { foo: 1 },
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-validated-action',
+          isDryRun: false,
+        },
+      };
       await runner.execute(task);
-
       expect(fakeActionHandler).toHaveBeenCalledTimes(1);
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started name (id: test) of task a-random-id triggering the jest-validated-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step name (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
+      );
     });
 
     it('should pass metadata through', async () => {
@@ -297,6 +488,33 @@ describe('NunjucksWorkflowRunner', () => {
 
       await runner.execute(task);
 
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: entityRef,
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-validated-action',
+          stepInputs: { foo: 1 },
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: entityRef,
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-validated-action',
+          isDryRun: false,
+        },
+      };
       expect(fakeActionHandler.mock.calls[0][0].templateInfo).toEqual({
         entityRef,
       });
@@ -304,6 +522,17 @@ describe('NunjucksWorkflowRunner', () => {
       expect(fakeActionHandler.mock.calls[0][0].user).toEqual({
         entity: userEntity,
       });
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started name (id: test) of task a-random-id triggering the jest-validated-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step name (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
+      );
     });
 
     it('should pass token through', async () => {
@@ -355,8 +584,83 @@ describe('NunjucksWorkflowRunner', () => {
       });
 
       const { output } = await runner.execute(task);
-
+      const auditLogStep1 = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'test',
+          stepAction: 'output-action',
+          stepInputs: {},
+          isDryRun: false,
+        },
+      };
+      const auditLogStep1Success = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'test',
+          stepAction: 'output-action',
+          isDryRun: false,
+        },
+      };
+      const auditLogStep2 = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'conditional',
+          stepName: 'conditional',
+          stepAction: 'output-action',
+          stepInputs: {},
+          stepConditional: '${{ steps.test.output.shouldRun }}',
+          isDryRun: false,
+        },
+      };
+      const auditLogStep2Success = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'conditional',
+          stepName: 'conditional',
+          stepAction: 'output-action',
+          isDryRun: false,
+        },
+      };
       expect(output.result).toBe('backstage');
+      expect(loggerSpy).toHaveBeenCalledTimes(4);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started test (id: test) of task a-random-id triggering the output-action action`,
+        auditLogStep1,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step test (id: test) of task a-random-id succeeded`,
+        auditLogStep1Success,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        3,
+        `Started conditional (id: conditional) of task a-random-id triggering the output-action action`,
+        auditLogStep2,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        4,
+        `Step conditional (id: conditional) of task a-random-id succeeded`,
+        auditLogStep2Success,
+      );
     });
 
     it('should skips steps conditionally', async () => {
@@ -380,6 +684,64 @@ describe('NunjucksWorkflowRunner', () => {
       const { output } = await runner.execute(task);
 
       expect(output.result).toBeUndefined();
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'test',
+          stepAction: 'output-action',
+          stepInputs: {},
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'test',
+          stepAction: 'output-action',
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSkip = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepSkip',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'conditional',
+          stepName: 'conditional',
+          stepConditional: '${{ not steps.test.output.shouldRun}}',
+          stepInputs: {},
+          stepAction: 'output-action',
+          isDryRun: false,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(3);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started test (id: test) of task a-random-id triggering the output-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step test (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        3,
+        `Skipped step conditional (id: conditional) of task a-random-id`,
+        auditLogStepSkip,
+      );
     });
 
     it('should skips steps using the negating equals operator', async () => {
@@ -431,6 +793,127 @@ describe('NunjucksWorkflowRunner', () => {
       expect(fakeActionHandler).toHaveBeenCalledWith(
         expect.objectContaining({ input: { foo: 'backstage' } }),
       );
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          stepInputs: {
+            foo: 'backstage',
+          },
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          isDryRun: false,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started name (id: test) of task a-random-id triggering the jest-mock-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step name (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
+      );
+    });
+
+    it('should skip steps using the negating equals operator', async () => {
+      const task = createMockTaskWithSpec({
+        apiVersion: 'scaffolder.backstage.io/v1beta3',
+        steps: [
+          { id: 'test', name: 'test', action: 'output-action' },
+          {
+            id: 'conditional',
+            name: 'conditional',
+            action: 'output-action',
+            if: '${{ steps.test.output.mock !== "backstage"}}',
+          },
+        ],
+        output: {
+          result: '${{ steps.conditional.output.mock }}',
+        },
+        parameters: {},
+      });
+
+      const { output } = await runner.execute(task);
+      expect(output.result).toBeUndefined();
+
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'test',
+          stepAction: 'output-action',
+          stepInputs: {},
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'test',
+          stepAction: 'output-action',
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSkip = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepSkip',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'conditional',
+          stepName: 'conditional',
+          stepConditional: '${{ steps.test.output.mock !== "backstage"}}',
+          stepInputs: {},
+          stepAction: 'output-action',
+          isDryRun: false,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(3);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started test (id: test) of task a-random-id triggering the output-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step test (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        3,
+        `Skipped step conditional (id: conditional) of task a-random-id`,
+        auditLogStepSkip,
+      );
     });
 
     it('should not try and parse something that is not parsable', async () => {
@@ -456,6 +939,46 @@ describe('NunjucksWorkflowRunner', () => {
       await runner.execute(task);
 
       expect(logger.error).not.toHaveBeenCalled();
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          stepInputs: {
+            foo: 'bob',
+          },
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          isDryRun: false,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started name (id: test) of task a-random-id triggering the jest-mock-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step name (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
+      );
     });
 
     it('should keep the original types for the input and not parse things that are not meant to be parsed', async () => {
@@ -484,6 +1007,48 @@ describe('NunjucksWorkflowRunner', () => {
       expect(fakeActionHandler).toHaveBeenCalledWith(
         expect.objectContaining({ input: { number: 0, string: '1' } }),
       );
+
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          stepInputs: {
+            number: 0,
+            string: '1',
+          },
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          isDryRun: false,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started name (id: test) of task a-random-id triggering the jest-mock-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step name (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
+      );
     });
 
     it('should template complex values into the action', async () => {
@@ -509,6 +1074,48 @@ describe('NunjucksWorkflowRunner', () => {
 
       expect(fakeActionHandler).toHaveBeenCalledWith(
         expect.objectContaining({ input: { foo: { bar: 'BACKSTAGE' } } }),
+      );
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          stepInputs: {
+            foo: {
+              bar: 'BACKSTAGE',
+            },
+          },
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          isDryRun: false,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started name (id: test) of task a-random-id triggering the jest-mock-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step name (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
       );
     });
 
@@ -539,6 +1146,46 @@ describe('NunjucksWorkflowRunner', () => {
       expect(fakeActionHandler).toHaveBeenCalledWith(
         expect.objectContaining({ input: { foo: 'nested' } }),
       );
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          stepInputs: {
+            foo: 'nested',
+          },
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          isDryRun: false,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started name (id: test) of task a-random-id triggering the jest-mock-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step name (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
+      );
     });
 
     it('supports numbers as first class too', async () => {
@@ -567,6 +1214,46 @@ describe('NunjucksWorkflowRunner', () => {
 
       expect(fakeActionHandler).toHaveBeenCalledWith(
         expect.objectContaining({ input: { foo: 1 } }),
+      );
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          stepInputs: {
+            foo: 1,
+          },
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          isDryRun: false,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started name (id: test) of task a-random-id triggering the jest-mock-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step name (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
       );
     });
 
@@ -756,12 +1443,87 @@ describe('NunjucksWorkflowRunner', () => {
       });
       await runner.execute(task);
 
+      const auditLogStepCompletion = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          isDryRun: false,
+        },
+      };
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          stepInputs: {},
+          stepEach: '${{parameters.colors}}',
+          isDryRun: false,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(11);
+
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started name (id: test) of task a-random-id triggering the jest-mock-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        11,
+        `Step name (id: test) of task a-random-id succeeded`,
+        auditLogStepCompletion,
+      );
       colors.forEach((color, idx) => {
         expectTaskLog(
           `info: Running step each: {"key":"${idx}","value":"${color}"}`,
         );
         expect(fakeActionHandler).toHaveBeenCalledWith(
           expect.objectContaining({ input: { color } }),
+        );
+        const auditLogStepIteration = {
+          ...commonAuditLogMeta,
+          eventName: 'ScaffolderTaskStepIteration',
+          stage: 'initiation',
+          meta: {
+            templateRef: '',
+            taskId: 'a-random-id',
+            stepId: 'test',
+            stepName: 'name',
+            stepAction: `jest-mock-action[${idx}]`,
+            stepIterationInputs: {
+              color: color,
+            },
+            stepEach: '${{parameters.colors}}',
+            stepIterationCount: idx + 1,
+            stepIterationValue: color,
+            totalIterations: colors.length,
+            isDryRun: false,
+          },
+        };
+        const auditLogStepIterationSuccess = {
+          ...auditLogStepIteration,
+          stage: 'completion',
+        };
+        const count: number = idx + 1;
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          (idx + 1) * 3,
+          `Iteration ${count}/${colors.length} of action jest-mock-action of step name (id: test) of task ${task.taskId} started`,
+          auditLogStepIteration,
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          (idx + 1) * 3 + 1,
+          `Iteration ${count}/${colors.length} of action jest-mock-action of step name (id: test) of task ${task.taskId} succeeded`,
+          auditLogStepIterationSuccess,
         );
       });
     });
@@ -918,9 +1680,48 @@ describe('NunjucksWorkflowRunner', () => {
       expect(fakeActionHandler).toHaveBeenCalledWith(
         expect.objectContaining({ secrets: { foo: 'bar' } }),
       );
+
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          stepInputs: {},
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          isDryRun: false,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started name (id: test) of task a-random-id triggering the jest-mock-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step name (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
+      );
     });
 
-    it('should be able to template secrets into the input of an action', async () => {
+    it('should be able to template secrets into the input of an action and secrets should be redacted in the audit logs', async () => {
       const task = createMockTaskWithSpec(
         {
           apiVersion: 'scaffolder.backstage.io/v1beta3',
@@ -944,6 +1745,47 @@ describe('NunjucksWorkflowRunner', () => {
 
       expect(fakeActionHandler).toHaveBeenCalledWith(
         expect.objectContaining({ input: { b: 'bar' } }),
+      );
+      // The value of secrets should be REDACTED in the audit logs
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          stepInputs: {
+            b: '[REDACTED]',
+          },
+          isDryRun: false,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-mock-action',
+          isDryRun: false,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started name (id: test) of task a-random-id triggering the jest-mock-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Step name (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
       );
     });
 
@@ -1285,6 +2127,46 @@ describe('NunjucksWorkflowRunner', () => {
       await runner.execute(task);
 
       expect(fakeActionHandler.mock.calls[0][0].isDryRun).toEqual(true);
+      const auditLogStep = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-validated-action',
+          stepInputs: {
+            foo: 1,
+          },
+          isDryRun: true,
+        },
+      };
+      const auditLogStepSuccess = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-validated-action',
+          isDryRun: true,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(3);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Started name (id: test) of task a-random-id triggering the jest-validated-action action`,
+        auditLogStep,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        3,
+        `Step name (id: test) of task a-random-id succeeded`,
+        auditLogStepSuccess,
+      );
     });
   });
 
@@ -1307,9 +2189,56 @@ describe('NunjucksWorkflowRunner', () => {
           },
         ],
       });
-
-      await expect(runner.execute(task)).rejects.toThrow(
-        /Unauthorized action: jest-validated-action. The action is not allowed/,
+      const error: Error = await getError(async () => runner.execute(task));
+      expect(error.message)
+        .toBe(`Unauthorized action: jest-validated-action. The action is not allowed. Input: {
+  "foo": 1
+}`);
+      const auditLogErrorMeta = {
+        ...commonAuditErrorMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        meta: {
+          taskId: 'a-random-id',
+          isDryRun: false,
+          stepAction: 'jest-validated-action',
+          stepId: 'test',
+          stepName: 'name',
+          templateRef: '',
+        },
+        errors: [
+          {
+            name: 'NotAllowedError',
+            message: `Unauthorized action: jest-validated-action. The action is not allowed. Input: {
+  "foo": 1
+}`,
+            stack: error.stack,
+          },
+        ],
+      };
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        `Step name (id: test) of task a-random-id failed`,
+        auditLogErrorMeta,
+      );
+      expect(loggerSpy).toHaveBeenCalledTimes(1);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        meta: {
+          templateRef: '',
+          taskId: 'a-random-id',
+          stepId: 'test',
+          stepName: 'name',
+          stepAction: 'jest-validated-action',
+          stepInputs: { foo: 1 },
+          isDryRun: false,
+        },
+      };
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        'Started name (id: test) of task a-random-id triggering the jest-validated-action action',
+        auditLogInitMeta,
       );
       expect(fakeActionHandler).not.toHaveBeenCalled();
     });

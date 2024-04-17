@@ -31,6 +31,8 @@ import {
 import { WorkflowRunner } from './types';
 import ObservableImpl from 'zen-observable';
 import waitForExpect from 'wait-for-expect';
+import { mockCredentials, mockServices } from '@backstage/backend-test-utils';
+import { DefaultAuditLogger } from '../../util/auditLogging';
 
 jest.mock('./NunjucksWorkflowRunner');
 const MockedNunjucksWorkflowRunner =
@@ -53,8 +55,19 @@ async function createStore(): Promise<DatabaseTaskStore> {
   });
 }
 
+const commonAuditLogMeta = {
+  actor: {
+    actorId: 'scaffolder-backend',
+  },
+  isAuditLog: true,
+  eventName: 'ScaffolderTaskExecution',
+  stage: 'initiation',
+  status: 'succeeded',
+};
+
 describe('TaskWorker', () => {
   let storage: DatabaseTaskStore;
+  let loggerSpy: jest.SpyInstance;
 
   const integrations: ScmIntegrations = {} as ScmIntegrations;
 
@@ -64,6 +77,7 @@ describe('TaskWorker', () => {
   const workflowRunner: NunjucksWorkflowRunner = {
     execute: jest.fn(),
   } as unknown as NunjucksWorkflowRunner;
+  const logger = getVoidLogger();
 
   beforeAll(async () => {
     storage = await createStore();
@@ -72,14 +86,26 @@ describe('TaskWorker', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     MockedNunjucksWorkflowRunner.mockImplementation(() => workflowRunner);
+    loggerSpy = jest.spyOn(logger, 'info');
   });
 
-  const logger = getVoidLogger();
+  const auditLogger = new DefaultAuditLogger({
+    logger,
+    authService: mockServices.auth({
+      pluginId: 'scaffolder',
+      disableDefaultAuthPolicy: false,
+    }),
+    httpAuthService: mockServices.httpAuth({
+      pluginId: 'scaffolder',
+      defaultCredentials: mockCredentials.user(),
+    }),
+  });
 
   it('should call the default workflow runner when the apiVersion is beta3', async () => {
-    const broker = new StorageTaskBroker(storage, logger);
+    const broker = new StorageTaskBroker(storage, logger, auditLogger);
     const taskWorker = await TaskWorker.create({
       logger,
+      auditLogger,
       workingDirectory,
       integrations,
       taskBroker: broker,
@@ -99,7 +125,18 @@ describe('TaskWorker', () => {
 
     const task = await broker.claim();
     await taskWorker.runOneTask(task);
-
+    const auditLogEntry = {
+      ...commonAuditLogMeta,
+      meta: {
+        taskId: task.taskId,
+        taskParameters: task.spec.parameters,
+        templateRef: task.spec.templateInfo?.entityRef,
+      },
+    };
+    expect(loggerSpy).toHaveBeenCalledWith(
+      `Scaffolding task with taskId: ${task.taskId} initiated`,
+      auditLogEntry,
+    );
     expect(workflowRunner.execute).toHaveBeenCalled();
   });
 
@@ -108,9 +145,10 @@ describe('TaskWorker', () => {
       output: { testOutput: 'testmockoutput' },
     });
 
-    const broker = new StorageTaskBroker(storage, logger);
+    const broker = new StorageTaskBroker(storage, logger, auditLogger);
     const taskWorker = await TaskWorker.create({
       logger,
+      auditLogger,
       workingDirectory,
       integrations,
       taskBroker: broker,
@@ -130,7 +168,36 @@ describe('TaskWorker', () => {
 
     const task = await broker.claim();
     await taskWorker.runOneTask(task);
+    const auditLogInitEntry = {
+      ...commonAuditLogMeta,
+      meta: {
+        taskId: task.taskId,
+        taskParameters: task.spec.parameters,
+        templateRef: task.spec.templateInfo?.entityRef,
+      },
+    };
+    const auditLogCompletionEntry = {
+      ...commonAuditLogMeta,
+      meta: {
+        taskId: task.taskId,
+        taskParameters: task.spec.parameters,
+        output: {
+          testOutput: 'testmockoutput',
+        },
+      },
+      stage: 'completion',
+    };
+    expect(loggerSpy).toHaveBeenNthCalledWith(
+      1,
+      `Scaffolding task with taskId: ${task.taskId} initiated`,
+      auditLogInitEntry,
+    );
 
+    expect(loggerSpy).toHaveBeenNthCalledWith(
+      2,
+      `Scaffolding task with taskId: ${task.taskId} completed successfully`,
+      auditLogCompletionEntry,
+    );
     const { events } = await storage.listEvents({ taskId });
     const event = events.find(e => e.type === 'completion');
     expect(event?.body.output).toEqual({ testOutput: 'testmockoutput' });
@@ -139,6 +206,7 @@ describe('TaskWorker', () => {
 
 describe('Concurrent TaskWorker', () => {
   let storage: DatabaseTaskStore;
+  let loggerSpy: jest.SpyInstance;
 
   const integrations: ScmIntegrations = {} as ScmIntegrations;
 
@@ -156,6 +224,7 @@ describe('Concurrent TaskWorker', () => {
       });
     },
   } as unknown as NunjucksWorkflowRunner;
+  const logger = getVoidLogger();
 
   beforeAll(async () => {
     storage = await createStore();
@@ -165,12 +234,23 @@ describe('Concurrent TaskWorker', () => {
     asyncTasksCount = 0;
     jest.resetAllMocks();
     MockedNunjucksWorkflowRunner.mockImplementation(() => workflowRunner);
+    loggerSpy = jest.spyOn(logger, 'info');
   });
 
-  const logger = getVoidLogger();
+  const auditLogger = new DefaultAuditLogger({
+    logger,
+    authService: mockServices.auth({
+      pluginId: 'scaffolder',
+      disableDefaultAuthPolicy: false,
+    }),
+    httpAuthService: mockServices.httpAuth({
+      pluginId: 'scaffolder',
+      defaultCredentials: mockCredentials.user(),
+    }),
+  });
 
   it('should be able to run multiple tasks at once', async () => {
-    const broker = new StorageTaskBroker(storage, logger);
+    const broker = new StorageTaskBroker(storage, logger, auditLogger);
 
     const dispatchANewTask = () =>
       broker.dispatch({
@@ -187,6 +267,7 @@ describe('Concurrent TaskWorker', () => {
     const expectedConcurrentTasks = 3;
     const taskWorker = await TaskWorker.create({
       logger,
+      auditLogger,
       workingDirectory,
       integrations,
       taskBroker: broker,
@@ -200,13 +281,15 @@ describe('Concurrent TaskWorker', () => {
     await dispatchANewTask();
     await dispatchANewTask();
     await dispatchANewTask();
-
+    expect(loggerSpy).toHaveBeenCalledTimes(expectedConcurrentTasks);
     expect(asyncTasksCount).toEqual(expectedConcurrentTasks);
   });
 });
 
 describe('Cancellable TaskWorker', () => {
   let storage: DatabaseTaskStore;
+  let loggerSpy: jest.SpyInstance;
+
   const integrations: ScmIntegrations = {} as ScmIntegrations;
   const actionRegistry: TemplateActionRegistry = {} as TemplateActionRegistry;
   const workingDirectory = os.tmpdir();
@@ -218,6 +301,7 @@ describe('Cancellable TaskWorker', () => {
       myTask = task;
     },
   } as unknown as NunjucksWorkflowRunner;
+  const logger = getVoidLogger();
 
   beforeAll(async () => {
     storage = await createStore();
@@ -226,14 +310,26 @@ describe('Cancellable TaskWorker', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     MockedNunjucksWorkflowRunner.mockImplementation(() => workflowRunner);
+    loggerSpy = jest.spyOn(logger, 'info');
   });
 
-  const logger = getVoidLogger();
+  const auditLogger = new DefaultAuditLogger({
+    logger,
+    authService: mockServices.auth({
+      pluginId: 'scaffolder',
+      disableDefaultAuthPolicy: false,
+    }),
+    httpAuthService: mockServices.httpAuth({
+      pluginId: 'scaffolder',
+      defaultCredentials: mockCredentials.user(),
+    }),
+  });
 
   it('should be able to cancel the running task', async () => {
-    const taskBroker = new StorageTaskBroker(storage, logger);
+    const taskBroker = new StorageTaskBroker(storage, logger, auditLogger);
     const taskWorker = await TaskWorker.create({
       logger,
+      auditLogger,
       workingDirectory,
       integrations,
       taskBroker,
@@ -263,6 +359,19 @@ describe('Cancellable TaskWorker', () => {
     await waitForExpect(() => {
       expect(myTask?.cancelSignal.aborted).toBeTruthy();
     });
+
+    const auditLogEntry = {
+      ...commonAuditLogMeta,
+      meta: {
+        taskId,
+        taskParameters: {},
+      },
+    };
+    expect(loggerSpy).toHaveBeenCalledTimes(1);
+    expect(loggerSpy).toHaveBeenCalledWith(
+      `Scaffolding task with taskId: ${taskId} initiated`,
+      auditLogEntry,
+    );
   });
 });
 

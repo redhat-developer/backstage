@@ -31,6 +31,7 @@ import {
   SecureTemplateRenderer,
 } from '../../lib/templating/SecureTemplater';
 import {
+  TaskRecovery,
   TaskSpec,
   TaskSpecV1beta3,
   TaskStep,
@@ -52,16 +53,19 @@ import {
 } from '@backstage/plugin-permission-common';
 import { scaffolderActionRules } from '../../service/rules';
 import { actionExecutePermission } from '@backstage/plugin-scaffolder-common/alpha';
-import { TaskRecovery } from '@backstage/plugin-scaffolder-common';
 import { PermissionsService } from '@backstage/backend-plugin-api';
 import { loggerToWinstonLogger } from '@backstage/backend-common';
 import { BackstageLoggerTransport, WinstonLogger } from './logger';
+
+// TODO: Import from the common package once it's been published
+import { AuditLogger } from '../../util/auditLogging';
 
 type NunjucksWorkflowRunnerOptions = {
   workingDirectory: string;
   actionRegistry: TemplateActionRegistry;
   integrations: ScmIntegrations;
   logger: winston.Logger;
+  auditLogger: AuditLogger;
   additionalTemplateFilters?: Record<string, TemplateFilter>;
   additionalTemplateGlobals?: Record<string, TemplateGlobal>;
   permissions?: PermissionsService;
@@ -121,7 +125,7 @@ const createStepLogger = ({
   // Initially this stream used to be the only way to write to the client logs, but that
   // has changed over time, there's not really a need for this anymore.
   // You can just create a simple wrapper like the below in your action to write to the main logger.
-  // This way we also get recactions for free.
+  // This way we also get redactions for free.
   const streamLogger = new PassThrough();
   streamLogger.on('data', async data => {
     const message = data.toString().trim();
@@ -146,7 +150,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
     });
   }
 
-  private readonly tracker = scaffoldingTracker();
+  private readonly tracker = scaffoldingTracker(this.options.auditLogger);
 
   private isSingleTemplateString(input: string) {
     const { parser, nodes } = nunjucks as unknown as {
@@ -239,7 +243,9 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
     const stepTrack = await this.tracker.stepStart(task, step);
 
     if (task.cancelSignal.aborted) {
-      throw new Error(`Step ${step.name} has been cancelled.`);
+      throw new Error(
+        `Step ${step.id} (${step.name}) of task ${task.taskId} has been cancelled.`,
+      );
     }
 
     try {
@@ -259,29 +265,65 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
         rootLogger: this.options.logger,
       });
 
+      const redactedSecrets = Object.fromEntries(
+        Object.entries(task.secrets ?? {}).map(secret => [
+          secret[0],
+          '[REDACTED]',
+        ]),
+      );
+      const stepInputs =
+        (step.input &&
+          this.render(
+            step.input,
+            {
+              ...context,
+              secrets: redactedSecrets,
+            },
+            renderTemplate,
+          )) ??
+        {};
+      const commonStepAuditMetadata = {
+        templateRef: task.spec.templateInfo?.entityRef || '',
+        taskId: task.taskId,
+        stepId: step.id,
+        stepName: step.name,
+        stepAction: step.action,
+        stepInputs: stepInputs,
+        stepConditional: step.if,
+        stepEach: step.each,
+        isDryRun: task.isDryRun || false,
+      };
+      if (step.if) {
+        const ifResult = this.render(step.if, context, renderTemplate);
+        if (!isTruthy(ifResult)) {
+          await stepTrack.skipFalsy();
+          await this.options.auditLogger.auditLog({
+            eventName: 'ScaffolderTaskStepSkip',
+            actorId: 'scaffolder-backend',
+            stage: 'completion',
+            status: 'succeeded',
+            metadata: commonStepAuditMetadata,
+            message: `Skipped step ${step.name} (id: ${step.id}) of task ${task.taskId}`,
+          });
+          return;
+        }
+      }
+
+      await this.options.auditLogger.auditLog({
+        actorId: 'scaffolder-backend',
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'initiation',
+        status: 'succeeded',
+        metadata: commonStepAuditMetadata,
+        message: `Started ${step.name} (id: ${step.id}) of task ${task.taskId} triggering the ${step.action} action`,
+      });
+
       if (task.isDryRun) {
-        const redactedSecrets = Object.fromEntries(
-          Object.entries(task.secrets ?? {}).map(secret => [
-            secret[0],
-            '[REDACTED]',
-          ]),
-        );
-        const debugInput =
-          (step.input &&
-            this.render(
-              step.input,
-              {
-                ...context,
-                secrets: redactedSecrets,
-              },
-              renderTemplate,
-            )) ??
-          {};
         taskLogger.info(
           `Running ${
             action.id
           } in dry-run mode with inputs (secrets redacted): ${JSON.stringify(
-            debugInput,
+            stepInputs,
             undefined,
             2,
           )}`,
@@ -355,7 +397,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
       const tmpDirs = new Array<string>();
       const stepOutput: { [outputName: string]: JsonValue } = {};
       const prevTaskState = await task.getTaskState?.();
-
+      let iterationCount: number = 0;
       for (const iteration of iterations) {
         if (iteration.each) {
           taskLogger.info(
@@ -365,7 +407,25 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
               0,
             )}`,
           );
+
+          await this.options.auditLogger.auditLog({
+            actorId: 'scaffolder-backend',
+            eventName: 'ScaffolderTaskStepIteration',
+            stage: 'initiation',
+            status: 'succeeded',
+            metadata: {
+              ...commonStepAuditMetadata,
+              stepInputs: undefined,
+              stepAction: `${step.action}[${iteration.each.key}]`,
+              stepIterationInputs: iteration.input,
+              stepIterationCount: ++iterationCount,
+              stepIterationValue: iteration.each.value,
+              totalIterations: iterations.length,
+            },
+            message: `Iteration ${iterationCount}/${iterations.length} of action ${step.action} of step ${step.name} (id: ${step.id}) of task ${task.taskId} started`,
+          });
         }
+
         await action.handler({
           input: iteration.input,
           secrets: task.secrets ?? {},
@@ -433,6 +493,24 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
           signal: task.cancelSignal,
           getInitiatorCredentials: () => task.getInitiatorCredentials(),
         });
+        if (iteration.each) {
+          await this.options.auditLogger.auditLog({
+            actorId: 'scaffolder-backend',
+            eventName: 'ScaffolderTaskStepIteration',
+            stage: 'completion',
+            status: 'succeeded',
+            metadata: {
+              ...commonStepAuditMetadata,
+              stepInputs: undefined,
+              stepAction: `${step.action}[${iteration.each.key}]`,
+              stepIterationCount: iterationCount,
+              stepIterationValue: iteration.each.value,
+              stepIterationInputs: iteration.input,
+              totalIterations: iterations.length,
+            },
+            message: `Iteration ${iterationCount}/${iterations.length} of action ${step.action} of step ${step.name} (id: ${step.id}) of task ${task.taskId} succeeded`,
+          });
+        }
       }
 
       // Remove all temporary directories that were created when executing the action
@@ -443,14 +521,16 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
       context.steps[step.id] = { output: stepOutput };
 
       if (task.cancelSignal.aborted) {
-        throw new Error(`Step ${step.name} has been cancelled.`);
+        throw new Error(
+          `Step ${step.id} (${step.name}) of task ${task.taskId} has been cancelled.`,
+        );
       }
 
       await task.cleanWorkspace?.();
       await stepTrack.markSuccessful();
     } catch (err) {
       await taskTrack.markFailed(step, err);
-      await stepTrack.markFailed();
+      await stepTrack.markFailed(err);
       throw err;
     } finally {
       await task.serializeWorkspace?.({ path: workspacePath });
@@ -522,7 +602,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
   }
 }
 
-function scaffoldingTracker() {
+function scaffoldingTracker(auditLogger: AuditLogger) {
   const taskCount = createCounterMetric({
     name: 'scaffolder_task_count',
     help: 'Count of task runs',
@@ -629,6 +709,21 @@ function scaffoldingTracker() {
         result: 'ok',
       });
       stepTimer({ result: 'ok' });
+      await auditLogger.auditLog({
+        actorId: 'scaffolder-backend',
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        status: 'succeeded',
+        metadata: {
+          templateRef: template,
+          taskId: task.taskId,
+          stepId: step.id,
+          stepName: step.name,
+          stepAction: step.action,
+          isDryRun: task.isDryRun || false,
+        },
+        message: `Step ${step.name} (id: ${step.id}) of task ${task.taskId} succeeded`,
+      });
     }
 
     async function markCancelled() {
@@ -640,13 +735,36 @@ function scaffoldingTracker() {
       stepTimer({ result: 'cancelled' });
     }
 
-    async function markFailed() {
+    async function markFailed(err: Error) {
       stepCount.inc({
         template,
         step: step.name,
         result: 'failed',
       });
       stepTimer({ result: 'failed' });
+      await auditLogger.auditLog({
+        actorId: 'scaffolder-backend',
+        eventName: 'ScaffolderTaskStepExecution',
+        stage: 'completion',
+        status: 'failed',
+        level: 'error',
+        metadata: {
+          templateRef: template,
+          taskId: task.taskId,
+          stepId: step.id,
+          stepName: step.name,
+          stepAction: step.action,
+          isDryRun: task.isDryRun || false,
+        },
+        errors: [
+          {
+            name: err.name,
+            message: err.message,
+            stack: err.stack,
+          },
+        ],
+        message: `Step ${step.name} (id: ${step.id}) of task ${task.taskId} failed`,
+      });
     }
 
     async function skipFalsy() {

@@ -38,6 +38,7 @@ import {
   BackstageCredentials,
   resolveSafeChildPath,
 } from '@backstage/backend-plugin-api';
+import { AuditLogger } from '../../util/auditLogging';
 
 interface DryRunInput {
   spec: TaskSpec;
@@ -55,6 +56,7 @@ interface DryRunResult {
 /** @internal */
 export type TemplateTesterCreateOptions = {
   logger: Logger;
+  auditLogger: AuditLogger;
   integrations: ScmIntegrations;
   actionRegistry: TemplateActionRegistry;
   workingDirectory: string;
@@ -102,6 +104,7 @@ export function createDryRunner(options: TemplateTesterCreateOptions) {
       const abortSignal = new AbortController().signal;
 
       const result = await workflowRunner.execute({
+        taskId: dryRunId,
         spec: {
           ...input.spec,
           steps: [

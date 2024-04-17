@@ -29,6 +29,9 @@ import { ScmIntegrations } from '@backstage/integration';
 import { assertError, stringifyError } from '@backstage/errors';
 import { PermissionEvaluator } from '@backstage/plugin-permission-common';
 
+// TODO: Import from the common package once it's been published
+import { AuditLogger } from '../../util/auditLogging';
+
 /**
  * TaskWorkerOptions
  *
@@ -42,6 +45,7 @@ export type TaskWorkerOptions = {
   concurrentTasksLimit: number;
   permissions?: PermissionEvaluator;
   logger?: Logger;
+  auditLogger?: AuditLogger;
 };
 
 /**
@@ -55,6 +59,7 @@ export type CreateWorkerOptions = {
   integrations: ScmIntegrations;
   workingDirectory: string;
   logger: Logger;
+  auditLogger: AuditLogger;
   additionalTemplateFilters?: Record<string, TemplateFilter>;
   /**
    * The number of tasks that can be executed at the same time by the worker
@@ -82,10 +87,12 @@ export class TaskWorker {
   private taskQueue: PQueue;
   private logger: Logger | undefined;
   private stopWorkers: boolean;
+  private auditLogger: AuditLogger | undefined;
 
   private constructor(private readonly options: TaskWorkerOptions) {
     this.stopWorkers = false;
     this.logger = options.logger;
+    this.auditLogger = options.auditLogger;
     this.taskQueue = new PQueue({
       concurrency: options.concurrentTasksLimit,
     });
@@ -102,12 +109,14 @@ export class TaskWorker {
       concurrentTasksLimit = 10, // from 1 to Infinity
       additionalTemplateGlobals,
       permissions,
+      auditLogger,
     } = options;
 
     const workflowRunner = new NunjucksWorkflowRunner({
       actionRegistry,
       integrations,
       logger,
+      auditLogger,
       workingDirectory,
       additionalTemplateFilters,
       additionalTemplateGlobals,
@@ -119,6 +128,7 @@ export class TaskWorker {
       runners: { workflowRunner },
       concurrentTasksLimit,
       permissions,
+      auditLogger,
     });
   }
 
@@ -167,16 +177,26 @@ export class TaskWorker {
 
   async runOneTask(task: TaskContext) {
     try {
+      await this.auditLogger?.auditLog({
+        eventName: 'ScaffolderTaskExecution',
+        actorId: 'scaffolder-backend',
+        stage: 'initiation',
+        status: 'succeeded',
+        metadata: {
+          taskId: task.taskId,
+          taskParameters: task.spec.parameters,
+          templateRef: task.spec.templateInfo?.entityRef,
+        },
+        message: `Scaffolding task with taskId: ${task.taskId} initiated`,
+      });
       if (task.spec.apiVersion !== 'scaffolder.backstage.io/v1beta3') {
         throw new Error(
           `Unsupported Template apiVersion ${task.spec.apiVersion}`,
         );
       }
-
       const { output } = await this.options.runners.workflowRunner.execute(
         task,
       );
-
       await task.complete('completed', { output });
     } catch (error) {
       assertError(error);
