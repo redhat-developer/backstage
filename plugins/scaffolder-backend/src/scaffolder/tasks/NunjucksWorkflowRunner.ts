@@ -298,11 +298,13 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
           stepName: step.name,
           stepAction: step.action,
           stepInputs: stepInputs,
+          stepConditional: step.if,
+          stepEach: step.each,
         },
       };
       this.options.logger.info(
         `Started ${step.name} (id: ${step.id}) of task ${task.taskId} triggering the ${step.action} action`,
-        { ...auditLogStep, auditLog: true },
+        { ...auditLogStep, isAuditLog: true },
       );
       if (task.isDryRun) {
         taskLogger.info(
@@ -383,7 +385,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
       const tmpDirs = new Array<string>();
       const stepOutput: { [outputName: string]: JsonValue } = {};
       const prevTaskState = await task.getTaskState?.();
-
+      let iterationCount: number = 0;
       for (const iteration of iterations) {
         if (iteration.each) {
           taskLogger.info(
@@ -393,7 +395,33 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
               0,
             )}`,
           );
+          const auditLogStepIteration = {
+            timestamp: new Date().toISOString(),
+            actor: {
+              user_id: 'scaffolder-backend',
+            },
+            event_name: 'ScaffolderTaskStepIterationInitiation',
+            status: 'success',
+            metadata: {
+              templateRef: task.spec.templateInfo?.entityRef || '',
+              taskId: task.taskId,
+              stepId: step.id,
+              stepName: step.name,
+              stepAction: `${step.action}[${iteration.each.key}]`,
+              stepIterationInputs: iteration.input,
+              stepConditional: step.if,
+              stepEach: step.each,
+              stepIterationCount: ++iterationCount,
+              stepIterationValue: iteration.each.value,
+              totalIterations: iterations.length,
+            },
+          };
+          this.options.logger.info(
+            `Iteration ${iterationCount}/${iterations.length} of action ${step.action} of step ${step.name} (id: ${step.id}) of task ${task.taskId} started`,
+            { ...auditLogStepIteration, isAuditLog: true },
+          );
         }
+
         await action.handler({
           input: iteration.input,
           secrets: task.secrets ?? {},
@@ -459,6 +487,32 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
           signal: task.cancelSignal,
           getInitiatorCredentials: () => task.getInitiatorCredentials(),
         });
+
+        if (iteration.each) {
+          const auditLogStepSuccess = {
+            timestamp: new Date().toISOString(),
+            actor: {
+              user_id: 'scaffolder-backend',
+            },
+            event_name: 'ScaffolderTaskStepIterationCompletion',
+            status: 'success',
+            metadata: {
+              templateRef: task.spec.templateInfo?.entityRef || '',
+              taskId: task.taskId,
+              stepId: step.id,
+              stepName: step.name,
+              stepAction: step.action,
+              stepEach: step.each,
+              stepIterationCount: iterationCount,
+              stepIterationValue: iteration.each.value,
+              totalIterations: iterations.length,
+            },
+          };
+          this.options.logger.info(
+            `Iteration ${iterationCount}/${iterations.length} of action ${step.action} of step ${step.name} (id: ${step.id}) of task ${task.taskId} succeeded`,
+            { ...auditLogStepSuccess, isAuditLog: true },
+          );
+        }
       }
 
       // Remove all temporary directories that were created when executing the action
@@ -669,8 +723,8 @@ function scaffoldingTracker(logger: winston.Logger) {
         },
       };
       logger.info(
-        `Step ${step.id} (${step.name}) of task ${task.taskId} succeeded`,
-        { ...auditLogStepSuccess, auditLog: true },
+        `Step ${step.name} (id: ${step.id}) of task ${task.taskId} succeeded`,
+        { ...auditLogStepSuccess, isAuditLog: true },
       );
     }
 
@@ -710,9 +764,9 @@ function scaffoldingTracker(logger: winston.Logger) {
           },
         },
       };
-      logger.error(
-        `Step ${step.id} (${step.name}) of task ${task.taskId} failed`,
-        { ...auditLogStepFailure, auditLog: true },
+      logger.warn(
+        `Step ${step.name} (id: ${step.id}) of task ${task.taskId} failed`,
+        { ...auditLogStepFailure, isAuditLog: true },
       );
     }
 
