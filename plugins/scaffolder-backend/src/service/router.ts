@@ -476,7 +476,6 @@ export async function createRouter(
       const userEntity = userEntityRef
         ? await catalogClient.getEntityByRef(userEntityRef, { token })
         : undefined;
-
       const values = req.body.values;
 
       const template = await authorizeTemplate(
@@ -484,7 +483,6 @@ export async function createRouter(
         token,
         credentials,
       );
-
       for (const parameters of [template.spec.parameters ?? []].flat()) {
         const result = validate(values, parameters);
 
@@ -504,7 +502,7 @@ export async function createRouter(
               error: result.errors,
             },
           };
-          logger.info(
+          logger.error(
             `Scaffolding task for ${templateRef} creation attempt by ${userEntityRef} failed`,
             { ...auditLogEntry, isAuditLog: true },
           );
@@ -573,7 +571,6 @@ export async function createRouter(
         `Scaffolding task for ${templateRef} with taskId: ${result.taskId} created by ${userEntityRef}`,
         { ...auditLogEntry, isAuditLog: true },
       );
-
       res.status(201).json({ id: result.taskId });
     })
     .get('/v2/tasks', async (req, res) => {

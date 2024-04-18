@@ -174,11 +174,12 @@ export class TaskManager implements TaskContext {
       status: result === 'failed' ? 'failed' : 'success',
       metadata: {
         taskId: this.task.taskId,
+        taskParameters: this.task.spec.parameters,
         ...metadata,
       },
     };
     if (result === 'failed') {
-      this.logger.error(
+      this.logger.warn(
         `Scaffolding task with taskId: ${this.task.taskId} failed`,
         { ...auditLogEntry, isAuditLog: true },
       );

@@ -89,6 +89,7 @@ const config = new ConfigReader({});
 describe('createRouter', () => {
   let app: express.Express;
   let loggerSpy: jest.SpyInstance;
+  let loggerErrorSpy: jest.SpyInstance;
   let taskBroker: TaskBroker;
   const catalogClient = { getEntityByRef: jest.fn() } as unknown as CatalogApi;
   const permissionApi = {
@@ -191,14 +192,18 @@ describe('createRouter', () => {
       const databaseTaskStore = await DatabaseTaskStore.create({
         database: createDatabase(),
       });
-      taskBroker = new StorageTaskBroker(databaseTaskStore, logger, config);
+      // Need to set advanceTimers option to true or else async code does not work
       jest.useFakeTimers({ advanceTimers: true });
       jest.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
+
+      taskBroker = new StorageTaskBroker(databaseTaskStore, logger, config);
       jest.spyOn(taskBroker, 'dispatch');
       jest.spyOn(taskBroker, 'get');
       jest.spyOn(taskBroker, 'list');
       jest.spyOn(taskBroker, 'event$');
       loggerSpy = jest.spyOn(logger, 'info');
+      loggerErrorSpy = jest.spyOn(logger, 'error');
+
       uuidSpy.mockReturnValue('a-random-id');
       const router = await createRouter({
         logger: logger,
@@ -271,7 +276,30 @@ describe('createRouter', () => {
             },
           });
         // TODO: add the expected validation error
-        const error: ValidationError[] = {};
+        const error = [
+          {
+            argument: 'requiredParameter1',
+            instance: {
+              storePath: 'https://github.com/backstage/backstage',
+            },
+            message: 'requires property "requiredParameter1"',
+            name: 'required',
+            path: [],
+            property: 'instance',
+            schema: {
+              properties: {
+                requiredParameter1: {
+                  description: 'Required parameter 1',
+                  type: 'string',
+                },
+              },
+              required: ['requiredParameter1'],
+              type: 'object',
+            },
+            stack: 'instance requires property "requiredParameter1"',
+          },
+        ];
+
         const auditLogMeta = {
           actor: {
             client: undefined,
@@ -281,15 +309,16 @@ describe('createRouter', () => {
           event_name: 'scaffolderTaskCreation',
           isAuditLog: true,
           metadata: {
-            taskId: 'a-random-id',
             templateRef: 'template:default/create-react-app-template',
+            error: error,
           },
           status: 'failed',
+          // Need to add 0.02s due to the timer advancing. This may be flaky
           timestamp: '2024-01-01T00:00:00.020Z',
         };
-        expect(loggerSpy).toHaveBeenCalledTimes(1);
-        expect(loggerSpy).toHaveBeenCalledWith(
-          'Scaffolding task for template:default/create-react-app-template creation attempt by ${userEntityRef} user:default/mock failed',
+        expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+        expect(loggerErrorSpy).toHaveBeenCalledWith(
+          'Scaffolding task for template:default/create-react-app-template creation attempt by user:default/mock failed',
           auditLogMeta,
         );
         expect(response.status).toEqual(400);
@@ -408,6 +437,7 @@ describe('createRouter', () => {
             templateRef: 'template:default/create-react-app-template',
           },
           status: 'success',
+          // Need to add 0.02s due to the timer advancing. This may be flaky
           timestamp: '2024-01-01T00:00:00.020Z',
         };
         expect(loggerSpy).toHaveBeenCalledTimes(2);
@@ -743,13 +773,17 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
         database: createDatabase(),
       });
       taskBroker = new StorageTaskBroker(databaseTaskStore, logger, config);
-
+      // Need to set advanceTimers option to true or else async code does not work
+      jest.useFakeTimers({ advanceTimers: true });
+      jest.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
       jest.spyOn(taskBroker, 'dispatch');
       jest.spyOn(taskBroker, 'get');
       jest.spyOn(taskBroker, 'list');
       jest.spyOn(taskBroker, 'event$');
       loggerSpy = jest.spyOn(logger, 'info');
+      loggerErrorSpy = jest.spyOn(logger, 'error');
 
+      uuidSpy.mockReturnValue('a-random-id');
       const router = await createRouter({
         logger: logger,
         config: new ConfigReader({}),
@@ -793,6 +827,8 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
 
     afterEach(() => {
       jest.resetAllMocks();
+      jest.restoreAllMocks();
+      jest.useRealTimers();
     });
 
     describe('GET /v2/actions', () => {
@@ -936,7 +972,51 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
               storePath: 'https://github.com/backstage/backstage',
             },
           });
+        const error = [
+          {
+            argument: 'requiredParameter1',
+            instance: {
+              storePath: 'https://github.com/backstage/backstage',
+            },
+            message: 'requires property "requiredParameter1"',
+            name: 'required',
+            path: [],
+            property: 'instance',
+            schema: {
+              properties: {
+                requiredParameter1: {
+                  description: 'Required parameter 1',
+                  type: 'string',
+                },
+              },
+              required: ['requiredParameter1'],
+              type: 'object',
+            },
+            stack: 'instance requires property "requiredParameter1"',
+          },
+        ];
 
+        const auditLogMeta = {
+          actor: {
+            client: undefined,
+            ip_address: '::ffff:127.0.0.1',
+            user_id: 'user:default/mock',
+          },
+          event_name: 'scaffolderTaskCreation',
+          isAuditLog: true,
+          metadata: {
+            templateRef: 'template:default/create-react-app-template',
+            error: error,
+          },
+          status: 'failed',
+          // Need to add 0.02s due to the timer advancing. This may be flaky
+          timestamp: '2024-01-01T00:00:00.020Z',
+        };
+        expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+        expect(loggerErrorSpy).toHaveBeenCalledWith(
+          'Scaffolding task for template:default/create-react-app-template creation attempt by user:default/mock failed',
+          auditLogMeta,
+        );
         expect(response.status).toEqual(400);
       });
 
@@ -1167,7 +1247,7 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
         );
       });
 
-      it('should emit auditlog containing user identifier when backstage auth is passed', async () => {
+      it('should emit auditlog containing the user identifier when backstage auth is passed', async () => {
         await request(app)
           .post('/v2/tasks')
           .send({
@@ -1181,9 +1261,31 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
             },
           });
 
+        const auditLogMeta = {
+          actor: {
+            client: undefined,
+            ip_address: '::ffff:127.0.0.1',
+            user_id: 'user:default/mock',
+          },
+          event_name: 'scaffolderTaskCreation',
+          isAuditLog: true,
+          metadata: {
+            taskId: 'a-random-id',
+            templateRef: 'template:default/create-react-app-template',
+          },
+          status: 'success',
+          // Need to add 0.02s due to the timer advancing. This may be flaky
+          timestamp: '2024-01-01T00:00:00.020Z',
+        };
         expect(loggerSpy).toHaveBeenCalledTimes(2);
-        expect(loggerSpy).toHaveBeenCalledWith(
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
           'Scaffolding task for template:default/create-react-app-template created by user:default/mock',
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          2,
+          'Scaffolding task for template:default/create-react-app-template with taskId: a-random-id created by user:default/mock',
+          auditLogMeta,
         );
       });
     });

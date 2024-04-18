@@ -45,17 +45,43 @@ describe('StorageTaskBroker', () => {
   let storage: DatabaseTaskStore;
   const fakeSecrets = { backstageToken: 'secret' } as TaskSecrets;
 
+  const logger = getVoidLogger();
+  let loggerSpy: jest.SpyInstance;
+  let loggerWarnSpy: jest.SpyInstance;
+
   beforeAll(async () => {
     storage = await createStore();
   });
 
+  beforeEach(async () => {
+    loggerSpy = jest.spyOn(logger, 'info');
+    loggerWarnSpy = jest.spyOn(logger, 'warn');
+    // Need to set advanceTimers option to true or else async code does not work
+    jest.useFakeTimers({ advanceTimers: true });
+    jest.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
+  });
+  afterEach(() => {
+    jest.resetAllMocks();
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
   const emptyTaskSpec = { spec: { steps: [] } as unknown as TaskSpec };
+  const loginTaskSpec = {
+    apiVersion: 'scaffolder.backstage.io/v1beta3',
+    parameters: { test: 'test', backstageToken: '****' },
+    output: { result: 'welcome' },
+    steps: [{ id: 'login', name: 'login attempt', action: 'login-action' }],
+  } as TaskSpec;
+
+  const loginTask = {
+    spec: loginTaskSpec,
+    secrets: fakeSecrets,
+  };
   const emptyTaskWithFakeSecretsSpec = {
     spec: { steps: [] } as unknown as TaskSpec,
     secrets: fakeSecrets,
   };
 
-  const logger = getVoidLogger();
   it('should claim a dispatched work item', async () => {
     const broker = new StorageTaskBroker(storage, logger);
     await broker.dispatch(emptyTaskSpec);
@@ -104,7 +130,25 @@ describe('StorageTaskBroker', () => {
     const task = await broker.claim();
     await task.complete('completed');
     const taskRow = await storage.getTask(dispatchResult.taskId);
+
+    const auditLogEntry = {
+      timestamp: '2024-01-01T00:00:00.000Z',
+      actor: {
+        user_id: 'scaffolder-backend',
+      },
+      event_name: 'scaffolderTaskCompletion',
+      status: 'success',
+      metadata: {
+        taskId: dispatchResult.taskId,
+      },
+    };
     expect(taskRow.status).toBe('completed');
+    expect(loggerSpy).toHaveBeenCalledTimes(1);
+    expect(loggerSpy).toHaveBeenNthCalledWith(
+      1,
+      `Scaffolding task with taskId: ${dispatchResult.taskId} completed successfully`,
+      { ...auditLogEntry, isAuditLog: true },
+    );
   }, 10000);
 
   it('should remove secrets after picking up a task', async () => {
@@ -120,10 +164,66 @@ describe('StorageTaskBroker', () => {
     const broker = new StorageTaskBroker(storage, logger);
     const dispatchResult = await broker.dispatch(emptyTaskSpec);
     const task = await broker.claim();
-    await task.complete('failed');
+    await task.complete('failed', {
+      error: {
+        name: 'TaskError',
+        message: 'The task failed',
+      },
+    });
     const taskRow = await storage.getTask(dispatchResult.taskId);
     expect(taskRow.status).toBe('failed');
+
+    const auditLogEntry = {
+      timestamp: '2024-01-01T00:00:00.000Z',
+      actor: {
+        user_id: 'scaffolder-backend',
+      },
+      event_name: 'scaffolderTaskCompletion',
+      status: 'failed',
+      metadata: {
+        taskId: dispatchResult.taskId,
+        error: {
+          name: 'TaskError',
+          message: 'The task failed',
+        },
+      },
+    };
+    expect(loggerWarnSpy).toHaveBeenCalledTimes(1);
+    expect(loggerWarnSpy).toHaveBeenNthCalledWith(
+      1,
+      `Scaffolding task with taskId: ${dispatchResult.taskId} failed`,
+      { ...auditLogEntry, isAuditLog: true },
+    );
   });
+
+  it('should audit log details of the task after completing a task successfully', async () => {
+    const broker = new StorageTaskBroker(storage, logger);
+    const dispatchResult = await broker.dispatch(loginTask);
+    const task = await broker.claim();
+    await task.complete('completed', { output: loginTask.spec.output });
+    const taskRow = await storage.getTask(dispatchResult.taskId);
+
+    const auditLogEntry = {
+      timestamp: '2024-01-01T00:00:00.000Z',
+      actor: {
+        user_id: 'scaffolder-backend',
+      },
+      event_name: 'scaffolderTaskCompletion',
+      status: 'success',
+      metadata: {
+        taskId: dispatchResult.taskId,
+        taskParameters: { test: 'test', backstageToken: '****' },
+        output: { result: 'welcome' },
+      },
+    };
+    expect(taskRow.status).toBe('completed');
+    expect(loggerSpy).toHaveBeenCalledTimes(1);
+    expect(loggerSpy).toHaveBeenNthCalledWith(
+      1,
+      `Scaffolding task with taskId: ${dispatchResult.taskId} completed successfully`,
+      { ...auditLogEntry, isAuditLog: true },
+    );
+  }, 10000);
 
   it('multiple brokers should be able to observe a single task', async () => {
     const broker1 = new StorageTaskBroker(storage, logger);
@@ -157,6 +257,23 @@ describe('StorageTaskBroker', () => {
       'log 3',
       'Run completed with status: completed',
     ]);
+    const auditLogEntry = {
+      timestamp: '2024-01-01T00:00:00.000Z',
+      actor: {
+        user_id: 'scaffolder-backend',
+      },
+      event_name: 'scaffolderTaskCompletion',
+      status: 'success',
+      metadata: {
+        taskId: taskId,
+      },
+    };
+    expect(loggerSpy).toHaveBeenCalledTimes(1);
+    expect(loggerSpy).toHaveBeenNthCalledWith(
+      1,
+      `Scaffolding task with taskId: ${taskId} completed successfully`,
+      { ...auditLogEntry, isAuditLog: true },
+    );
 
     const afterLogs = await new Promise<string[]>(resolve => {
       const subscription = broker2
@@ -214,6 +331,23 @@ describe('StorageTaskBroker', () => {
     clearInterval(intervalId);
 
     expect(task.done).toBe(true);
+
+    const auditLogEntry = {
+      // 2s due to `vacuumTasks` having a timeout of 2s
+      timestamp: '2024-01-01T00:00:02.000Z',
+      actor: {
+        user_id: 'scaffolder-backend',
+      },
+      event_name: 'scaffolderStaleTaskCancellation',
+      status: 'success',
+      metadata: {
+        taskId: taskId,
+      },
+    };
+    expect(loggerSpy).toHaveBeenLastCalledWith(
+      `Stale scaffolding task ${task.taskId} cancelled because the task worker lost connection to the task broker`,
+      { ...auditLogEntry, isAuditLog: true },
+    );
   });
 
   it('should list all tasks', async () => {
