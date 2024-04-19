@@ -487,7 +487,6 @@ export async function createRouter(
         const result = validate(values, parameters);
 
         if (!result.valid) {
-          res.status(400).json({ errors: result.errors });
           const auditLogEntry = {
             timestamp: new Date().toISOString(),
             actor: {
@@ -506,6 +505,7 @@ export async function createRouter(
             `Scaffolding task for ${templateRef} creation attempt by ${userEntityRef} failed`,
             { ...auditLogEntry, isAuditLog: true },
           );
+          res.status(400).json({ errors: result.errors });
           return;
         }
       }
@@ -610,17 +610,9 @@ export async function createRouter(
 
       // FIXME: this was added just to populate userEntityRef for now. This will need to be modified to restrict this endpoint.
       const credentials = await httpAuth.credentials(req);
-      const { token } = await auth.getPluginRequestToken({
-        onBehalfOf: credentials,
-        targetPluginId: 'catalog',
-      });
 
       const userEntityRef = auth.isPrincipal(credentials, 'user')
         ? credentials.principal.userEntityRef
-        : undefined;
-
-      const userEntity = userEntityRef
-        ? await catalogClient.getEntityByRef(userEntityRef, { token })
         : undefined;
 
       await taskBroker.cancel?.(taskId);
@@ -740,7 +732,9 @@ export async function createRouter(
       if (!(await templateEntityV1beta3Validator.check(template))) {
         throw new InputError('Input template is not a template');
       }
-
+      const templateRef: string = `${template.kind}:${
+        template.metadata.namespace || 'default'
+      }/${template.metadata.name}`;
       const credentials = await httpAuth.credentials(req);
 
       const { token } = await auth.getPluginRequestToken({
@@ -748,14 +742,54 @@ export async function createRouter(
         targetPluginId: 'catalog',
       });
 
+      const userEntityRef = auth.isPrincipal(credentials, 'user')
+        ? credentials.principal.userEntityRef
+        : undefined;
+
       for (const parameters of [template.spec.parameters ?? []].flat()) {
         const result = validate(body.values, parameters);
         if (!result.valid) {
+          const auditLogEntry = {
+            timestamp: new Date().toISOString(),
+            actor: {
+              user_id: userEntityRef,
+              client: req.get('user-agent'),
+              ip_address: req.ip,
+            },
+            event_name: 'scaffolderTaskDryRunCreation',
+            status: 'failed',
+            metadata: {
+              templateRef: templateRef,
+              parameters: template.spec.parameters,
+              error: result.errors,
+            },
+          };
+          logger.error(
+            `Dry run scaffolding task for ${templateRef} creation attempt by ${userEntityRef} failed`,
+            { ...auditLogEntry, isAuditLog: true },
+          );
           res.status(400).json({ errors: result.errors });
           return;
         }
       }
-
+      const auditLogEntry = {
+        timestamp: new Date().toISOString(),
+        actor: {
+          user_id: userEntityRef,
+          client: req.get('user-agent'),
+          ip_address: req.ip,
+        },
+        event_name: 'scaffolderTaskDryRunCreation',
+        status: 'success',
+        metadata: {
+          templateRef: templateRef,
+          parameters: template.spec.parameters,
+        },
+      };
+      logger.info(
+        `Dry run scaffolding task for ${templateRef} started by ${userEntityRef}`,
+        { ...auditLogEntry, isAuditLog: true },
+      );
       const steps = template.spec.steps.map((step, index) => ({
         ...step,
         id: step.id ?? `step-${index + 1}`,
@@ -779,7 +813,24 @@ export async function createRouter(
         },
         credentials,
       });
-
+      const auditLogCompletion = {
+        timestamp: new Date().toISOString(),
+        actor: {
+          user_id: userEntityRef,
+          client: req.get('user-agent'),
+          ip_address: req.ip,
+        },
+        event_name: 'scaffolderDryRunTaskCompletion',
+        status: 'success',
+        metadata: {
+          taskParameters: template.spec.parameters,
+          ...result,
+        },
+      };
+      logger.info(
+        `Dry run scaffolding task for ${templateRef} started by ${userEntityRef} completed successfully`,
+        { ...auditLogCompletion, isAuditLog: true },
+      );
       res.status(200).json({
         ...result,
         steps,

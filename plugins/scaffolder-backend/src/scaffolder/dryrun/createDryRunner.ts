@@ -100,6 +100,7 @@ export function createDryRunner(options: TemplateTesterCreateOptions) {
       const abortSignal = new AbortController().signal;
 
       const result = await workflowRunner.execute({
+        taskId: dryRunId,
         spec: {
           ...input.spec,
           steps: [
