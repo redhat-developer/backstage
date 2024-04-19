@@ -300,6 +300,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
           stepInputs: stepInputs,
           stepConditional: step.if,
           stepEach: step.each,
+          isDryRun: task.isDryRun || false,
         },
       };
       this.options.logger.info(
@@ -414,6 +415,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
               stepIterationCount: ++iterationCount,
               stepIterationValue: iteration.each.value,
               totalIterations: iterations.length,
+              isDryRun: task.isDryRun || false,
             },
           };
           this.options.logger.info(
@@ -506,6 +508,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
               stepIterationCount: iterationCount,
               stepIterationValue: iteration.each.value,
               totalIterations: iterations.length,
+              isDryRun: task.isDryRun || false,
             },
           };
           this.options.logger.info(
@@ -720,6 +723,7 @@ function scaffoldingTracker(logger: winston.Logger) {
           stepId: step.id,
           stepName: step.name,
           stepAction: step.action,
+          isDryRun: task.isDryRun || false,
         },
       };
       logger.info(
@@ -757,6 +761,7 @@ function scaffoldingTracker(logger: winston.Logger) {
           stepId: step.id,
           stepName: step.name,
           stepAction: step.action,
+          isDryRun: task.isDryRun || false,
           error: {
             name: err.name,
             message: err.message,
