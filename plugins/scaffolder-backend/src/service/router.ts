@@ -45,8 +45,12 @@ import {
   RESOURCE_TYPE_SCAFFOLDER_TEMPLATE,
   scaffolderActionPermissions,
   scaffolderTemplatePermissions,
+  taskCancelPermission,
+  taskCreatePermission,
+  taskReadPermission,
   templateParameterReadPermission,
   templateStepReadPermission,
+  scaffolderTaskPermissions,
 } from '@backstage/plugin-scaffolder-common/alpha';
 import express from 'express';
 import Router from 'express-promise-router';
@@ -93,6 +97,7 @@ import { InternalTaskSecrets } from '../scaffolder/tasks/types';
 import { cloneDeep } from 'lodash';
 // TODO: Import from the common package once it's been published
 import { DefaultAuditLogger } from '../util/auditLogging';
+import { checkPermission } from '../util/checkPermissions';
 
 /**
  *
@@ -424,6 +429,7 @@ export async function createRouter(
         rules: actionRules,
       },
     ],
+    permissions: scaffolderTaskPermissions,
   });
 
   router.use(permissionIntegrationRouter);
@@ -520,45 +526,66 @@ export async function createRouter(
       },
     )
     .get('/v2/actions', async (req, res) => {
-      await auditLogger.auditLog({
-        eventName: 'ScaffolderInstalledActionsFetch',
-        stage: 'initiation',
-        status: 'succeeded',
-        request: req,
-        message: `${await auditLogger.getActorId(
-          req,
-        )} requested the list of installed actions`,
-      });
-      const actionsList = actionRegistry.list().map(action => {
-        return {
-          id: action.id,
-          description: action.description,
-          examples: action.examples,
-          schema: action.schema,
-        };
-      });
-      await auditLogger.auditLog({
-        eventName: 'ScaffolderInstalledActionsFetch',
-        stage: 'completion',
-        status: 'succeeded',
-        request: req,
-        response: {
-          status: 200,
-          body: actionsList,
-        },
-        message: `${await auditLogger.getActorId(
-          req,
-        )} successfully requested the list of installed actions`,
-      });
-      res.json(actionsList);
+      try {
+        await auditLogger.auditLog({
+          eventName: 'ScaffolderInstalledActionsFetch',
+          stage: 'initiation',
+          status: 'succeeded',
+          request: req,
+          message: `${await auditLogger.getActorId(
+            req,
+          )} requested the list of installed actions`,
+        });
+        const actionsList = actionRegistry.list().map(action => {
+          return {
+            id: action.id,
+            description: action.description,
+            examples: action.examples,
+            schema: action.schema,
+          };
+        });
+        await auditLogger.auditLog({
+          eventName: 'ScaffolderInstalledActionsFetch',
+          stage: 'completion',
+          status: 'succeeded',
+          request: req,
+          response: {
+            status: 200,
+            body: actionsList,
+          },
+          message: `${await auditLogger.getActorId(
+            req,
+          )} successfully requested the list of installed actions`,
+        });
+        res.json(actionsList);
+      } catch (err) {
+        await auditLogger.auditLog({
+          eventName: 'ScaffolderInstalledActionsFetch',
+          stage: 'completion',
+          status: 'failed',
+          level: 'error',
+          request: req,
+          errors: [
+            {
+              name: err.name,
+              message: err.message,
+              stack: err.stack,
+            },
+          ],
+          message: `${await auditLogger.getActorId(
+            req,
+          )} failed to request for the list of installed actions`,
+        });
+        throw err;
+      }
     })
     .post('/v2/tasks', async (req, res) => {
       const templateRef: string = req.body.templateRef;
       const { kind, namespace, name } = parseEntityRef(templateRef, {
         defaultKind: 'template',
       });
-
       const credentials = await httpAuth.credentials(req);
+
       const { token } = await auth.getPluginRequestToken({
         onBehalfOf: credentials,
         targetPluginId: 'catalog',
@@ -591,108 +618,135 @@ export async function createRouter(
         };
         redactedRequest.body = redactedBody;
       }
-
-      await auditLogger.auditLog({
-        eventName: 'ScaffolderTaskCreation',
-        stage: 'initiation',
-        status: 'succeeded',
-        actorId: userEntityRef,
-        request: redactedRequest,
-        metadata: {
-          templateRef: templateRef,
-        },
-        message: `Scaffolding task for ${templateRef} creation attempt by ${userEntityRef} initiated`,
-      });
-      const template = await authorizeTemplate(
-        { kind, namespace, name },
-        token,
-        credentials,
-      );
-      for (const parameters of [template.spec.parameters ?? []].flat()) {
-        const result = validate(values, parameters);
-        if (!result.valid) {
-          await auditLogger.auditLog({
-            eventName: 'ScaffolderTaskCreation',
-            stage: 'completion',
-            status: 'failed',
-            level: 'error',
-            actorId: userEntityRef,
-            request: redactedRequest,
-            metadata: {
-              templateRef: templateRef,
-            },
-            response: {
-              status: 400,
-              body: { errors: result.errors },
-            },
-            errors: result.errors,
-            message: `Scaffolding task for ${templateRef} creation attempt by ${userEntityRef} failed`,
-          });
-          res.status(400).json({ errors: result.errors });
-          return;
-        }
-      }
-
-      const baseUrl = getEntityBaseUrl(template);
-
-      const taskSpec: TaskSpec = {
-        apiVersion: template.apiVersion,
-        steps: template.spec.steps.map((step, index) => ({
-          ...step,
-          id: step.id ?? `step-${index + 1}`,
-          name: step.name ?? step.action,
-        })),
-        EXPERIMENTAL_recovery: template.spec.EXPERIMENTAL_recovery,
-        output: template.spec.output ?? {},
-        parameters: values,
-        user: {
-          entity: userEntity as UserEntity,
-          ref: userEntityRef,
-        },
-        templateInfo: {
-          entityRef: stringifyEntityRef({ kind, name, namespace }),
-          baseUrl,
-          entity: {
-            metadata: template.metadata,
+      try {
+        await auditLogger.auditLog({
+          eventName: 'ScaffolderTaskCreation',
+          stage: 'initiation',
+          status: 'succeeded',
+          actorId: userEntityRef,
+          request: redactedRequest,
+          metadata: {
+            templateRef: templateRef,
           },
-        },
-      };
+          message: `Scaffolding task for ${templateRef} creation attempt by ${userEntityRef} initiated`,
+        });
+        await checkPermission({
+          credentials,
+          permissions: [taskCreatePermission],
+          permissionService: permissions,
+        });
+        const template = await authorizeTemplate(
+          { kind, namespace, name },
+          token,
+          credentials,
+        );
+        for (const parameters of [template.spec.parameters ?? []].flat()) {
+          const result = validate(values, parameters);
+          if (!result.valid) {
+            await auditLogger.auditLog({
+              eventName: 'ScaffolderTaskCreation',
+              stage: 'completion',
+              status: 'failed',
+              level: 'error',
+              actorId: await auditLogger.getActorId(req),
+              request: redactedRequest,
+              metadata: {
+                templateRef: templateRef,
+              },
+              response: {
+                status: 400,
+                body: { errors: result.errors },
+              },
+              errors: result.errors,
+              message: `Scaffolding task for ${templateRef} creation attempt by ${userEntityRef} failed`,
+            });
+            res.status(400).json({ errors: result.errors });
+            return;
+          }
+        }
 
-      const secrets: InternalTaskSecrets = {
-        ...req.body.secrets,
-        backstageToken: token,
-        __initiatorCredentials: JSON.stringify(credentials),
-      };
+        const baseUrl = getEntityBaseUrl(template);
 
-      const result = await taskBroker.dispatch({
-        spec: taskSpec,
-        createdBy: userEntityRef,
-        secrets,
-      });
+        const taskSpec: TaskSpec = {
+          apiVersion: template.apiVersion,
+          steps: template.spec.steps.map((step, index) => ({
+            ...step,
+            id: step.id ?? `step-${index + 1}`,
+            name: step.name ?? step.action,
+          })),
+          EXPERIMENTAL_recovery: template.spec.EXPERIMENTAL_recovery,
+          output: template.spec.output ?? {},
+          parameters: values,
+          user: {
+            entity: userEntity as UserEntity,
+            ref: userEntityRef,
+          },
+          templateInfo: {
+            entityRef: stringifyEntityRef({ kind, name, namespace }),
+            baseUrl,
+            entity: {
+              metadata: template.metadata,
+            },
+          },
+        };
 
-      let auditLog = `Scaffolding task for ${templateRef}`;
-      if (userEntityRef) {
-        auditLog += ` created by ${userEntityRef}`;
+        const secrets: InternalTaskSecrets = {
+          ...req.body.secrets,
+          backstageToken: token,
+          __initiatorCredentials: JSON.stringify(credentials),
+        };
+
+        const result = await taskBroker.dispatch({
+          spec: taskSpec,
+          createdBy: userEntityRef,
+          secrets,
+        });
+
+        let auditLog = `Scaffolding task for ${templateRef}`;
+        if (userEntityRef) {
+          auditLog += ` created by ${userEntityRef}`;
+        }
+
+        logger.info(auditLog);
+        await auditLogger.auditLog({
+          eventName: 'ScaffolderTaskCreation',
+          stage: 'completion',
+          status: 'succeeded',
+          actorId: await auditLogger.getActorId(req),
+          request: redactedRequest,
+          metadata: {
+            taskId: result.taskId,
+            templateRef: templateRef,
+          },
+          response: {
+            status: 201,
+            body: { id: result.taskId },
+          },
+          message: `Scaffolding task for ${templateRef} with taskId: ${result.taskId} successfully created by ${userEntityRef}`,
+        });
+        res.status(201).json({ id: result.taskId });
+      } catch (err) {
+        await auditLogger.auditLog({
+          eventName: 'ScaffolderTaskCreation',
+          stage: 'completion',
+          status: 'failed',
+          level: 'error',
+          actorId: await auditLogger.getActorId(req),
+          request: redactedRequest,
+          metadata: {
+            templateRef: templateRef,
+          },
+          errors: [
+            {
+              name: err.name,
+              message: err.message,
+              stack: err.stack,
+            },
+          ],
+          message: `Scaffolding task for ${templateRef} creation attempt by ${userEntityRef} failed`,
+        });
+        throw err;
       }
-
-      logger.info(auditLog);
-      await auditLogger.auditLog({
-        eventName: 'ScaffolderTaskCreation',
-        stage: 'completion',
-        status: 'succeeded',
-        actorId: userEntityRef,
-        request: redactedRequest,
-        metadata: {
-          taskId: result.taskId,
-          templateRef: templateRef,
-        },
-        response: {
-          status: 201,
-          body: { id: result.taskId },
-        },
-        message: `Scaffolding task for ${templateRef} with taskId: ${result.taskId} successfully created by ${userEntityRef}`,
-      });
-      res.status(201).json({ id: result.taskId });
     })
     .get('/v2/tasks', async (req, res) => {
       try {
@@ -705,6 +759,13 @@ export async function createRouter(
           message: `${await auditLogger.getActorId(
             req,
           )} requested for the list of scaffolder tasks`,
+        });
+        const credentials = await httpAuth.credentials(req);
+
+        await checkPermission({
+          credentials,
+          permissions: [taskReadPermission],
+          permissionService: permissions,
         });
         if (
           typeof userEntityRef !== 'string' &&
@@ -737,19 +798,12 @@ export async function createRouter(
         });
         res.status(200).json(tasks);
       } catch (err) {
-        let status = 500;
-        if (err.name === 'InputError') {
-          status = 400;
-        }
         await auditLogger.auditLog({
           eventName: 'ScaffolderTaskListFetch',
           stage: 'completion',
           status: 'failed',
           level: 'error',
           request: req,
-          response: {
-            status: status,
-          },
           errors: [
             {
               name: err.name,
@@ -779,6 +833,12 @@ export async function createRouter(
             req,
           )} requested for scaffolder task ${taskId}`,
         });
+        const credentials = await httpAuth.credentials(req);
+        await checkPermission({
+          credentials,
+          permissions: [taskReadPermission],
+          permissionService: permissions,
+        });
         const task = await taskBroker.get(taskId);
         if (!task) {
           throw new NotFoundError(`Task with id ${taskId} does not exist`);
@@ -800,19 +860,12 @@ export async function createRouter(
         });
         res.status(200).json(task);
       } catch (err) {
-        let status = 500;
-        if (err.name === 'NotFoundError') {
-          status = 404;
-        }
         await auditLogger.auditLog({
           eventName: 'ScaffolderTaskFetch',
           stage: 'completion',
           status: 'failed',
           level: 'error',
           request: req,
-          response: {
-            status: status,
-          },
           errors: [
             {
               name: err.name,
@@ -830,210 +883,319 @@ export async function createRouter(
     .post('/v2/tasks/:taskId/cancel', async (req, res) => {
       const { taskId } = req.params;
 
-      await auditLogger.auditLog({
-        eventName: 'ScaffolderTaskCancellation',
-        stage: 'initiation',
-        status: 'succeeded',
-        metadata: {
-          taskId,
-        },
-        request: req,
-        message: `Cancellation request for Scaffolding task with taskId: ${taskId} from ${await auditLogger.getActorId(
-          req,
-        )} received`,
-      });
-      await taskBroker.cancel?.(taskId);
-      await auditLogger.auditLog({
-        eventName: 'ScaffolderTaskCancellation',
-        stage: 'initiation',
-        status: 'succeeded',
-        metadata: {
-          taskId,
-        },
-        request: req,
-        response: {
-          status: 200,
-          body: { status: 'cancelled' },
-        },
-        message: `Scaffolding task with taskId: ${taskId} successfully cancelled by ${await auditLogger.getActorId(
-          req,
-        )}`,
-      });
-
-      res.status(200).json({ status: 'cancelled' });
-    })
-    .get('/v2/tasks/:taskId/eventstream', async (req, res) => {
-      const { taskId } = req.params;
-      const after =
-        req.query.after !== undefined ? Number(req.query.after) : undefined;
-
-      logger.debug(`Event stream observing taskId '${taskId}' opened`);
-      await auditLogger.auditLog({
-        eventName: 'ScaffolderTaskStream',
-        stage: 'initiation',
-        status: 'succeeded',
-        metadata: {
-          taskId,
-        },
-        request: req,
-        message: `Event stream for scaffolding task with taskId: ${taskId} was opened by ${await auditLogger.getActorId(
-          req,
-        )}`,
-      });
-      // Mandatory headers and http status to keep connection open
-      res.writeHead(200, {
-        Connection: 'keep-alive',
-        'Cache-Control': 'no-cache',
-        'Content-Type': 'text/event-stream',
-      });
-
-      // After client opens connection send all events as string
-      const subscription = taskBroker.event$({ taskId, after }).subscribe({
-        error: async error => {
-          logger.error(
-            `Received error from event stream when observing taskId '${taskId}', ${error}`,
-          );
-          await auditLogger.auditLog({
-            eventName: 'ScaffolderTaskStream',
-            stage: 'completion',
-            status: 'failed',
-            level: 'error',
-            metadata: {
-              taskId,
-            },
-            request: req,
-            errors: [
-              {
-                name: error.name,
-                message: error.message,
-                stack: error.stack,
-                cause: error.cause,
-              },
-            ],
-            message: `Received error from event stream observing scaffolding task with taskId: ${taskId} requested by ${await auditLogger.getActorId(
-              req,
-            )}`,
-          });
-          res.end();
-        },
-        next: ({ events }) => {
-          let shouldUnsubscribe = false;
-          for (const event of events) {
-            res.write(
-              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-            );
-            if (event.type === 'completion') {
-              shouldUnsubscribe = true;
-            }
-          }
-          // res.flush() is only available with the compression middleware
-          res.flush?.();
-          if (shouldUnsubscribe) {
-            subscription.unsubscribe();
-            res.end();
-          }
-        },
-      });
-
-      // When client closes connection we update the clients list
-      // avoiding the disconnected one
-      req.on('close', async () => {
-        subscription.unsubscribe();
-        logger.debug(`Event stream observing taskId '${taskId}' closed`);
+      try {
         await auditLogger.auditLog({
-          eventName: 'ScaffolderTaskStream',
-          stage: 'completion',
+          eventName: 'ScaffolderTaskCancellation',
+          stage: 'initiation',
           status: 'succeeded',
           metadata: {
             taskId,
           },
           request: req,
-          message: `Event stream observing scaffolding task with taskId: ${taskId} was closed by ${await auditLogger.getActorId(
+          message: `Cancellation request for Scaffolding task with taskId: ${taskId} from ${await auditLogger.getActorId(
+            req,
+          )} received`,
+        });
+        const credentials = await httpAuth.credentials(req);
+        // Requires both read and cancel permissions
+        await checkPermission({
+          credentials,
+          permissions: [taskCancelPermission, taskReadPermission],
+          permissionService: permissions,
+        });
+        await taskBroker.cancel?.(taskId);
+        await auditLogger.auditLog({
+          eventName: 'ScaffolderTaskCancellation',
+          stage: 'initiation',
+          status: 'succeeded',
+          metadata: {
+            taskId,
+          },
+          request: req,
+          response: {
+            status: 200,
+            body: { status: 'cancelled' },
+          },
+          message: `Scaffolding task with taskId: ${taskId} successfully cancelled by ${await auditLogger.getActorId(
             req,
           )}`,
         });
-      });
-    })
-    .get('/v2/tasks/:taskId/events', async (req, res) => {
-      const { taskId } = req.params;
-      const after = Number(req.query.after) || undefined;
 
-      await auditLogger.auditLog({
-        eventName: 'ScaffolderTaskEventFetch',
-        stage: 'initiation',
-        status: 'succeeded',
-        metadata: {
-          taskId,
-        },
-        request: req,
-        message: `Task events fetch attempt for scaffolding task with taskId: ${taskId} initiated by ${await auditLogger.getActorId(
-          req,
-        )}`,
-      });
-      // cancel the request after 30 seconds. this aligns with the recommendations of RFC 6202.
-      const timeout = setTimeout(() => {
-        res.json([]);
-      }, 30_000);
-
-      // Get all known events after an id (always includes the completion event) and return the first callback
-      const subscription = taskBroker.event$({ taskId, after }).subscribe({
-        error: async error => {
-          logger.error(
-            `Received error from event stream when observing taskId '${taskId}', ${error}`,
-          );
-          await auditLogger.auditLog({
-            eventName: 'ScaffolderTaskEventFetch',
-            stage: 'completion',
-            status: 'failed',
-            level: 'error',
-            metadata: {
-              taskId,
+        res.status(200).json({ status: 'cancelled' });
+      } catch (err) {
+        await auditLogger.auditLog({
+          eventName: 'ScaffolderTaskCancellation',
+          stage: 'completion',
+          status: 'failed',
+          level: 'error',
+          request: req,
+          errors: [
+            {
+              name: err.name,
+              message: err.message,
+              stack: err.stack,
             },
-            request: req,
-            errors: [
-              {
-                name: error.name,
-                message: error.message,
-                stack: error.stack,
+          ],
+          message: `${await auditLogger.getActorId(
+            req,
+          )} cancel request for task ${taskId} failed`,
+        });
+        throw err;
+      }
+    })
+    .get('/v2/tasks/:taskId/eventstream', async (req, res) => {
+      const { taskId } = req.params;
+
+      try {
+        const after =
+          req.query.after !== undefined ? Number(req.query.after) : undefined;
+
+        logger.debug(`Event stream observing taskId '${taskId}' opened`);
+        await auditLogger.auditLog({
+          eventName: 'ScaffolderTaskStream',
+          stage: 'initiation',
+          status: 'succeeded',
+          metadata: {
+            taskId,
+          },
+          request: req,
+          message: `Event stream for scaffolding task with taskId: ${taskId} was opened by ${await auditLogger.getActorId(
+            req,
+          )}`,
+        });
+        const credentials = await httpAuth.credentials(req);
+        await checkPermission({
+          credentials,
+          permissions: [taskReadPermission],
+          permissionService: permissions,
+        });
+        // Mandatory headers and http status to keep connection open
+        res.writeHead(200, {
+          Connection: 'keep-alive',
+          'Cache-Control': 'no-cache',
+          'Content-Type': 'text/event-stream',
+        });
+
+        // After client opens connection send all events as string
+        const subscription = taskBroker.event$({ taskId, after }).subscribe({
+          error: async error => {
+            logger.error(
+              `Received error from event stream when observing taskId '${taskId}', ${error}`,
+            );
+            await auditLogger.auditLog({
+              eventName: 'ScaffolderTaskStream',
+              stage: 'completion',
+              status: 'failed',
+              level: 'error',
+              metadata: {
+                taskId,
               },
-            ],
-            message: `Task events fetch attempt for scaffolding task with taskId: ${taskId} requested by ${await auditLogger.getActorId(
-              req,
-            )} failed`,
-          });
-        },
-        next: async ({ events }) => {
-          clearTimeout(timeout);
+              request: req,
+              errors: [
+                {
+                  name: error.name,
+                  message: error.message,
+                  stack: error.stack,
+                  cause: error.cause,
+                },
+              ],
+              message: `Received error from event stream observing scaffolding task with taskId: ${taskId} requested by ${await auditLogger.getActorId(
+                req,
+              )}`,
+            });
+            res.end();
+          },
+          next: ({ events }) => {
+            let shouldUnsubscribe = false;
+            for (const event of events) {
+              res.write(
+                `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+              );
+              if (event.type === 'completion') {
+                shouldUnsubscribe = true;
+              }
+            }
+            // res.flush() is only available with the compression middleware
+            res.flush?.();
+            if (shouldUnsubscribe) {
+              subscription.unsubscribe();
+              res.end();
+            }
+          },
+        });
+
+        // When client closes connection we update the clients list
+        // avoiding the disconnected one
+        req.on('close', async () => {
           subscription.unsubscribe();
+          logger.debug(`Event stream observing taskId '${taskId}' closed`);
           await auditLogger.auditLog({
-            eventName: 'ScaffolderTaskEventFetch',
+            eventName: 'ScaffolderTaskStream',
             stage: 'completion',
             status: 'succeeded',
             metadata: {
               taskId,
             },
             request: req,
-            response: {
-              status: 200,
-              body: events,
-            },
-            message: `Task events fetch attempt for scaffolding task with taskId: ${taskId} by ${await auditLogger.getActorId(
+            message: `Event stream observing scaffolding task with taskId: ${taskId} was closed by ${await auditLogger.getActorId(
               req,
-            )} succeeded`,
+            )}`,
           });
-          res.json(events);
-        },
-      });
+        });
+      } catch (err) {
+        await auditLogger.auditLog({
+          eventName: 'ScaffolderTaskStream',
+          stage: 'completion',
+          status: 'failed',
+          level: 'error',
+          metadata: {
+            taskId,
+          },
+          request: req,
+          errors: [
+            {
+              name: err.name,
+              message: err.message,
+              stack: err.stack,
+            },
+          ],
+          message: `Received error from event stream observing scaffolding task with taskId: ${taskId} requested by ${await auditLogger.getActorId(
+            req,
+          )}`,
+        });
+        throw err;
+      }
+    })
+    .get('/v2/tasks/:taskId/events', async (req, res) => {
+      const { taskId } = req.params;
+      try {
+        const after = Number(req.query.after) || undefined;
 
-      // When client closes connection we update the clients list
-      // avoiding the disconnected one
-      req.on('close', () => {
-        subscription.unsubscribe();
-        clearTimeout(timeout);
-      });
+        await auditLogger.auditLog({
+          eventName: 'ScaffolderTaskEventFetch',
+          stage: 'initiation',
+          status: 'succeeded',
+          metadata: {
+            taskId,
+          },
+          request: req,
+          message: `Task events fetch attempt for scaffolding task with taskId: ${taskId} initiated by ${await auditLogger.getActorId(
+            req,
+          )}`,
+        });
+        const credentials = await httpAuth.credentials(req);
+        await checkPermission({
+          credentials,
+          permissions: [taskReadPermission],
+          permissionService: permissions,
+        });
+        // cancel the request after 30 seconds. this aligns with the recommendations of RFC 6202.
+        const timeout = setTimeout(() => {
+          res.json([]);
+        }, 30_000);
+
+        // Get all known events after an id (always includes the completion event) and return the first callback
+        const subscription = taskBroker.event$({ taskId, after }).subscribe({
+          error: async error => {
+            logger.error(
+              `Received error from event stream when observing taskId '${taskId}', ${error}`,
+            );
+            await auditLogger.auditLog({
+              eventName: 'ScaffolderTaskEventFetch',
+              stage: 'completion',
+              status: 'failed',
+              level: 'error',
+              metadata: {
+                taskId,
+              },
+              request: req,
+              errors: [
+                {
+                  name: error.name,
+                  message: error.message,
+                  stack: error.stack,
+                },
+              ],
+              message: `Task events fetch attempt for scaffolding task with taskId: ${taskId} requested by ${await auditLogger.getActorId(
+                req,
+              )} failed`,
+            });
+          },
+          next: async ({ events }) => {
+            clearTimeout(timeout);
+            subscription.unsubscribe();
+            await auditLogger.auditLog({
+              eventName: 'ScaffolderTaskEventFetch',
+              stage: 'completion',
+              status: 'succeeded',
+              metadata: {
+                taskId,
+              },
+              request: req,
+              response: {
+                status: 200,
+                body: events,
+              },
+              message: `Task events fetch attempt for scaffolding task with taskId: ${taskId} by ${await auditLogger.getActorId(
+                req,
+              )} succeeded`,
+            });
+            res.json(events);
+          },
+        });
+
+        // When client closes connection we update the clients list
+        // avoiding the disconnected one
+        req.on('close', () => {
+          subscription.unsubscribe();
+          clearTimeout(timeout);
+        });
+      } catch (err) {
+        await auditLogger.auditLog({
+          eventName: 'ScaffolderTaskEventFetch',
+          stage: 'completion',
+          status: 'failed',
+          level: 'error',
+          metadata: {
+            taskId,
+          },
+          request: req,
+          errors: [
+            {
+              name: err.name,
+              message: err.message,
+              stack: err.stack,
+            },
+          ],
+          message: `Task events fetch attempt for scaffolding task with taskId: ${taskId} requested by ${await auditLogger.getActorId(
+            req,
+          )} failed`,
+        });
+        throw err;
+      }
     })
     .post('/v2/dry-run', async (req, res) => {
       try {
+        await auditLogger.auditLog({
+          eventName: 'ScaffolderTaskDryRun',
+          stage: 'initiation',
+          status: 'succeeded',
+          actorId: await auditLogger.getActorId(req),
+          metadata: {
+            isDryRun: true,
+          },
+          request: req,
+          message: `Dry Run scaffolder task initiated by ${await auditLogger.getActorId(
+            req,
+          )}`,
+        });
+        const credentials = await httpAuth.credentials(req);
+
+        await checkPermission({
+          credentials,
+          permissions: [taskCreatePermission],
+          permissionService: permissions,
+        });
         const bodySchema = z.object({
           template: z.unknown(),
           values: z.record(z.unknown()),
@@ -1045,7 +1207,6 @@ export async function createRouter(
         const body = await bodySchema.parseAsync(req.body).catch(e => {
           throw new InputError(`Malformed request: ${e}`);
         });
-
         const template = body.template as TemplateEntityV1beta3;
         if (!(await templateEntityV1beta3Validator.check(template))) {
           throw new InputError('Input template is not a template');
@@ -1053,7 +1214,6 @@ export async function createRouter(
         const templateRef: string = `${template.kind}:${
           template.metadata.namespace || 'default'
         }/${template.metadata.name}`;
-        const credentials = await httpAuth.credentials(req);
 
         const { token } = await auth.getPluginRequestToken({
           onBehalfOf: credentials,
@@ -1064,17 +1224,6 @@ export async function createRouter(
           ? credentials.principal.userEntityRef
           : undefined;
 
-        await auditLogger.auditLog({
-          eventName: 'ScaffolderTaskDryRun',
-          stage: 'initiation',
-          status: 'succeeded',
-          actorId: userEntityRef,
-          metadata: {
-            isDryRun: true,
-          },
-          request: req,
-          message: `Dry Run scaffolder task for ${templateRef} initiated by ${userEntityRef}`,
-        });
         for (const parameters of [template.spec.parameters ?? []].flat()) {
           const result = validate(body.values, parameters);
           if (!result.valid) {
@@ -1154,10 +1303,6 @@ export async function createRouter(
         });
         res.status(200).json(dryRunResults);
       } catch (err) {
-        let status = 500;
-        if (err.name === 'InputError') {
-          status = 400;
-        }
         await auditLogger.auditLog({
           eventName: 'ScaffolderTaskDryRun',
           stage: 'completion',
@@ -1174,9 +1319,6 @@ export async function createRouter(
               stack: err.stack,
             },
           ],
-          response: {
-            status: status,
-          },
           message: `Scaffolder Task Dry Run requested by ${await auditLogger.getActorId(
             req,
           )} failed`,

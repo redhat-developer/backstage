@@ -283,6 +283,11 @@ describe('createRouter', () => {
             result: AuthorizeResult.ALLOW,
           },
         ]);
+      jest.spyOn(permissionApi, 'authorize').mockImplementation(async () => [
+        {
+          result: AuthorizeResult.ALLOW,
+        },
+      ]);
     });
 
     afterEach(() => {
@@ -1063,6 +1068,11 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
             result: AuthorizeResult.ALLOW,
           },
         ]);
+      jest.spyOn(permissionApi, 'authorize').mockImplementation(async () => [
+        {
+          result: AuthorizeResult.ALLOW,
+        },
+      ]);
     });
 
     afterEach(() => {
