@@ -161,6 +161,10 @@ module.exports = {
             from: '/docs/getting-started/configuration',
             to: '/docs/getting-started/#next-steps',
           },
+          {
+            from: '/docs/features/software-templates/authorizing-parameters-steps-and-actions',
+            to: '/docs/features/software-templates/authorizing-scaffolder-template-details',
+          },
         ],
       },
     ],

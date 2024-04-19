@@ -6021,6 +6021,7 @@ __metadata:
     "@testing-library/jest-dom": ^6.0.0
     "@testing-library/react": ^15.0.0
     "@testing-library/user-event": ^14.0.0
+    "@types/pluralize": ^0.0.33
     "@types/react": ^16.13.1 || ^17.0.0 || ^18.0.0
     dataloader: ^2.0.0
     expiry-map: ^2.0.0
@@ -6028,6 +6029,7 @@ __metadata:
     lodash: ^4.17.21
     pluralize: ^8.0.0
     react-use: ^17.2.4
+    swr: ^2.2.5
     zen-observable: ^0.10.0
   peerDependencies:
     react: ^16.13.1 || ^17.0.0 || ^18.0.0
@@ -8719,6 +8721,8 @@ __metadata:
     "@backstage/plugin-catalog": "workspace:^"
     "@backstage/plugin-catalog-common": "workspace:^"
     "@backstage/plugin-catalog-react": "workspace:^"
+    "@backstage/plugin-permission-common": "workspace:^"
+    "@backstage/plugin-permission-react": "workspace:^"
     "@backstage/plugin-scaffolder-common": "workspace:^"
     "@backstage/test-utils": "workspace:^"
     "@backstage/theme": "workspace:^"
@@ -8749,6 +8753,7 @@ __metadata:
     luxon: ^3.0.0
     qs: ^6.9.4
     react-use: ^17.2.4
+    swr: ^2.0.0
     use-immer: ^0.9.0
     zen-observable: ^0.10.0
     zod: ^3.22.4
@@ -8779,6 +8784,7 @@ __metadata:
     "@backstage/plugin-catalog": "workspace:^"
     "@backstage/plugin-catalog-common": "workspace:^"
     "@backstage/plugin-catalog-react": "workspace:^"
+    "@backstage/plugin-permission-common": "workspace:^"
     "@backstage/plugin-permission-react": "workspace:^"
     "@backstage/plugin-scaffolder-common": "workspace:^"
     "@backstage/plugin-scaffolder-react": "workspace:^"
@@ -8815,6 +8821,7 @@ __metadata:
     msw: ^1.0.0
     qs: ^6.9.4
     react-use: ^17.2.4
+    swr: ^2.0.0
     yaml: ^2.0.0
     zen-observable: ^0.10.0
     zod: ^3.22.4
@@ -43146,7 +43153,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"swr@npm:^2.0.0":
+"swr@npm:^2.0.0, swr@npm:^2.2.5":
   version: 2.2.5
   resolution: "swr@npm:2.2.5"
   dependencies:
