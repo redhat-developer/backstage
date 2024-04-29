@@ -55,6 +55,7 @@ import { Logger } from 'winston';
 import { z } from 'zod';
 import {
   TaskBroker,
+  TemplateAction,
   TemplateFilter,
   TemplateGlobal,
 } from '@backstage/plugin-scaffolder-node';
@@ -67,7 +68,6 @@ import {
 import { createDryRunner } from '../scaffolder/dryrun';
 import { StorageTaskBroker } from '../scaffolder/tasks/StorageTaskBroker';
 import { findTemplate, getEntityBaseUrl, getWorkingDirectory } from './helpers';
-import { TemplateAction } from '@backstage/plugin-scaffolder-node';
 import { PermissionRuleParams } from '@backstage/plugin-permission-common';
 import {
   createConditionAuthorizer,
@@ -89,7 +89,7 @@ import {
   IdentityApiGetIdentityRequest,
 } from '@backstage/plugin-auth-node';
 import { InternalTaskSecrets } from '../scaffolder/tasks/types';
-import { resourceLimits } from 'worker_threads';
+import { createAuditLog } from '../util/auditLogging';
 
 /**
  *
@@ -487,20 +487,19 @@ export async function createRouter(
         const result = validate(values, parameters);
 
         if (!result.valid) {
-          const auditLogEntry = {
-            timestamp: new Date().toISOString(),
-            actor: {
-              user_id: userEntityRef,
-              client: req.get('user-agent'),
-              ip_address: req.ip,
-            },
-            event_name: 'scaffolderTaskCreation',
+          const auditLogEntry = await createAuditLog({
+            eventName: 'scaffolderTaskCreation',
             status: 'failed',
             metadata: {
               templateRef: templateRef,
               error: result.errors,
             },
-          };
+            authServices: {
+              httpAuth,
+              auth,
+              request: req,
+            },
+          });
           logger.error(
             `Scaffolding task for ${templateRef} creation attempt by ${userEntityRef} failed`,
             { ...auditLogEntry, isAuditLog: true },
@@ -553,20 +552,19 @@ export async function createRouter(
       }
 
       logger.info(auditLog);
-      const auditLogEntry = {
-        timestamp: new Date().toISOString(),
-        actor: {
-          user_id: userEntityRef,
-          client: req.get('user-agent'),
-          ip_address: req.ip,
-        },
-        event_name: 'scaffolderTaskCreation',
+      const auditLogEntry = await createAuditLog({
+        eventName: 'scaffolderTaskCreation',
         status: 'success',
         metadata: {
           taskId: result.taskId,
           templateRef: templateRef,
         },
-      };
+        authServices: {
+          httpAuth,
+          auth,
+          request: req,
+        },
+      });
       logger.info(
         `Scaffolding task for ${templateRef} with taskId: ${result.taskId} created by ${userEntityRef}`,
         { ...auditLogEntry, isAuditLog: true },
@@ -617,19 +615,18 @@ export async function createRouter(
 
       await taskBroker.cancel?.(taskId);
 
-      const auditLogEntry = {
-        timestamp: new Date().toISOString(),
-        actor: {
-          user_id: userEntityRef,
-          client: req.get('user-agent'),
-          ip_address: req.ip,
-        },
-        event_name: 'scaffolderTaskCancellation',
+      const auditLogEntry = await createAuditLog({
+        eventName: 'scaffolderTaskCancellation',
         status: 'success',
         metadata: {
           taskId,
         },
-      };
+        authServices: {
+          httpAuth,
+          auth,
+          request: req,
+        },
+      });
       logger.info(
         `Scaffolding task with taskId: ${taskId} was cancelled by ${userEntityRef}`,
         { ...auditLogEntry, isAuditLog: true },
@@ -749,21 +746,20 @@ export async function createRouter(
       for (const parameters of [template.spec.parameters ?? []].flat()) {
         const result = validate(body.values, parameters);
         if (!result.valid) {
-          const auditLogEntry = {
-            timestamp: new Date().toISOString(),
-            actor: {
-              user_id: userEntityRef,
-              client: req.get('user-agent'),
-              ip_address: req.ip,
-            },
-            event_name: 'scaffolderTaskDryRunCreation',
+          const auditLogEntry = await createAuditLog({
+            eventName: 'scaffolderTaskDryRunCreation',
             status: 'failed',
             metadata: {
               templateRef: templateRef,
               parameters: template.spec.parameters,
               error: result.errors,
             },
-          };
+            authServices: {
+              httpAuth,
+              auth,
+              request: req,
+            },
+          });
           logger.error(
             `Dry run scaffolding task for ${templateRef} creation attempt by ${userEntityRef} failed`,
             { ...auditLogEntry, isAuditLog: true },
@@ -772,20 +768,19 @@ export async function createRouter(
           return;
         }
       }
-      const auditLogEntry = {
-        timestamp: new Date().toISOString(),
-        actor: {
-          user_id: userEntityRef,
-          client: req.get('user-agent'),
-          ip_address: req.ip,
-        },
-        event_name: 'scaffolderTaskDryRunCreation',
+      const auditLogEntry = await createAuditLog({
+        eventName: 'scaffolderTaskDryRunCreation',
         status: 'success',
         metadata: {
           templateRef: templateRef,
           parameters: template.spec.parameters,
         },
-      };
+        authServices: {
+          httpAuth,
+          auth,
+          request: req,
+        },
+      });
       logger.info(
         `Dry run scaffolding task for ${templateRef} started by ${userEntityRef}`,
         { ...auditLogEntry, isAuditLog: true },
@@ -813,20 +808,20 @@ export async function createRouter(
         },
         credentials,
       });
-      const auditLogCompletion = {
-        timestamp: new Date().toISOString(),
-        actor: {
-          user_id: userEntityRef,
-          client: req.get('user-agent'),
-          ip_address: req.ip,
-        },
-        event_name: 'scaffolderDryRunTaskCompletion',
+
+      const auditLogCompletion = await createAuditLog({
+        eventName: 'scaffolderDryRunTaskCompletion',
         status: 'success',
         metadata: {
           taskParameters: template.spec.parameters,
           ...result,
         },
-      };
+        authServices: {
+          httpAuth,
+          auth,
+          request: req,
+        },
+      });
       logger.info(
         `Dry run scaffolding task for ${templateRef} started by ${userEntityRef} completed successfully`,
         { ...auditLogCompletion, isAuditLog: true },

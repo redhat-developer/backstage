@@ -34,6 +34,7 @@ import {
   AuthService,
   BackstageCredentials,
 } from '@backstage/backend-plugin-api';
+import { createAuditLog } from '../../util/auditLogging';
 
 type TaskState = {
   checkpoints: {
@@ -165,19 +166,16 @@ export class TaskManager implements TaskContext {
       clearTimeout(this.heartbeatTimeoutId);
     }
     // Audit logs the output if success, and errors if failed
-    const auditLogEntry = {
-      timestamp: new Date().toISOString(),
-      actor: {
-        user_id: 'scaffolder-backend',
-      },
-      event_name: 'scaffolderTaskCompletion',
+    const auditLogEntry = await createAuditLog({
+      actor_id: 'scaffolder-backend',
+      eventName: 'scaffolderTaskCompletion',
       status: result === 'failed' ? 'failed' : 'success',
       metadata: {
         taskId: this.task.taskId,
         taskParameters: this.task.spec.parameters,
         ...metadata,
       },
-    };
+    });
     if (result === 'failed') {
       this.logger.warn(
         `Scaffolding task with taskId: ${this.task.taskId} failed`,
@@ -426,28 +424,22 @@ export class StorageTaskBroker implements TaskBroker {
                 'The task was cancelled because the task worker lost connection to the task broker',
             },
           });
-          const auditLogEntry = {
-            timestamp: new Date().toISOString(),
-            actor: {
-              user_id: 'scaffolder-backend',
-            },
-            event_name: 'scaffolderStaleTaskCancellation',
+          const auditLogEntry = await createAuditLog({
+            actor_id: 'scaffolder-backend',
+            eventName: 'scaffolderStaleTaskCancellation',
             status: 'success',
             metadata: {
               taskId: task.taskId,
             },
-          };
+          });
           this.logger.info(
             `Stale scaffolding task ${task.taskId} cancelled because the task worker lost connection to the task broker`,
             { ...auditLogEntry, isAuditLog: true },
           );
         } catch (error) {
-          const auditLogEntry = {
-            timestamp: new Date().toISOString(),
-            actor: {
-              user_id: 'scaffolder-backend',
-            },
-            event_name: 'scaffolderStaleTaskCancellation',
+          const auditLogEntry = await createAuditLog({
+            actor_id: 'scaffolder-backend',
+            eventName: 'scaffolderStaleTaskCancellation',
             status: 'failed',
             metadata: {
               taskId: task.taskId,
@@ -457,7 +449,8 @@ export class StorageTaskBroker implements TaskBroker {
                 stack: error.stack,
               },
             },
-          };
+          });
+
           this.logger.warn(`Failed to cancel task '${task.taskId}', ${error}`, {
             ...auditLogEntry,
             isAuditLog: true,
