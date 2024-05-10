@@ -14,75 +14,243 @@
  * limitations under the License.
  */
 
-import { AuthService, HttpAuthService } from '@backstage/backend-plugin-api';
+import {
+  AuthService,
+  HttpAuthService,
+  LoggerService,
+} from '@backstage/backend-plugin-api';
+import { ErrorLike } from '@backstage/errors';
+import { JsonValue } from '@backstage/types';
+
 import { Request } from 'express';
 
-export type AuditLogActor = {
-  user_id: string;
-  client?: string;
-  ip_address?: string;
+export type ActorDetails = {
+  actorId: string;
+  ip?: string;
+  hostname?: string;
+  userAgent?: string;
 };
 
-export type AuditEventStatus = 'success' | 'failed';
-export type AuditLog = {
-  // timestamp is expected to be in ISO format
-  timestamp: string;
-  actor: AuditLogActor;
-  event_name: string;
-  status: AuditEventStatus;
-  metadata: { [key: string]: any };
+export type AuditRequest = {
+  body: any;
+  url: string;
+  method: string;
+  params?: any;
+  query?: any;
 };
-export type AuditAuthServices = {
-  auth: AuthService;
-  httpAuth: HttpAuthService;
-  request: Request;
+
+export type AuditResponse = {
+  status: number;
+  body?: any;
 };
+
+export type AuditLogStatus =
+  | {
+      status: 'failed';
+      errors: {
+        name: string;
+        message: string;
+        stack?: string;
+      }[];
+    }
+  | { status: 'succeeded' };
+
+/**
+ * Common fields of an audit log. Note: timestamp and pluginId are automatically added at log creation.
+ *
+ * @public
+ */
+export type AuditLogDetails = {
+  actor: ActorDetails;
+  eventName: string;
+  stage: string;
+  request?: AuditRequest;
+  response?: AuditResponse;
+  meta: JsonValue;
+  isAuditLog: true;
+} & AuditLogStatus;
+
+export type AuditActorOptions =
+  | {
+      actor_id: string;
+      request?: Request;
+    }
+  | {
+      actor_id?: string;
+      request: Request;
+    };
+
+export type AuditLogDetailsOptions = {
+  eventName: string;
+  stage: string;
+  metadata?: JsonValue;
+  response?: AuditResponse;
+} & AuditActorOptions &
+  ({ status: 'succeeded' } | { status: 'failed'; errors: unknown[] });
+
 export type AuditLogOptions = {
   eventName: string;
-  status: AuditEventStatus;
-  metadata: { [key: string]: any };
-  actor_id?: string;
-  authServices?: AuditAuthServices;
+  message: string;
+  stage: string;
+  metadata?: JsonValue;
+  response?: AuditResponse;
+} & AuditActorOptions;
+
+export type AuditErrorLogOptions = AuditLogOptions & { errors: ErrorLike[] };
+
+export type AuditLoggerOptions = {
+  logger: LoggerService;
+  authService: AuthService;
+  httpAuthService: HttpAuthService;
 };
 
-// TODO: Move this entire file into a common package
-export async function createAuditLog(
-  options: AuditLogOptions,
-): Promise<AuditLog> {
-  let actor_id = 'unknown';
-  if (options.authServices) {
-    const credentials = await options.authServices.httpAuth.credentials(
-      options.authServices.request,
-    );
+export interface AuditLogger {
+  /**
+   *
+   * Processes an express request and obtains the actorId from it. Returns undefined if actorId is not obtainable.
+   */
+  getActorId(request?: Request): Promise<string | undefined>;
 
-    const userEntityRef = options.authServices.auth.isPrincipal(
-      credentials,
-      'user',
-    )
+  /**
+   *
+   * Generates an AuditLogDetails object containing non-message details of the audit log
+   * Secrets in the request body field should be redacted by the user before passing in the request object
+   */
+  createAuditLogDetails(
+    options: AuditLogDetailsOptions,
+  ): Promise<AuditLogDetails>;
+
+  /**
+   *
+   * Generates an Audit Log and logs it at the info level
+   */
+  auditLog(options: AuditLogOptions): Promise<void>;
+
+  /**
+   *
+   * Generates an Audit Log for an error and logs it at the error level
+   */
+  auditErrorLog(options: AuditErrorLogOptions): Promise<void>;
+}
+
+export class DefaultAuditLogger implements AuditLogger {
+  private readonly logger: LoggerService;
+  private readonly authService: AuthService;
+  private readonly httpAuthService: HttpAuthService;
+
+  constructor(options: AuditLoggerOptions) {
+    this.logger = options.logger;
+    this.authService = options.authService;
+    this.httpAuthService = options.httpAuthService;
+  }
+
+  async getActorId(request?: Request): Promise<string | undefined> {
+    if (!(request && this.httpAuthService && this.authService)) {
+      return undefined;
+    }
+    const credentials = await this.httpAuthService.credentials(request);
+
+    const userEntityRef = this.authService.isPrincipal(credentials, 'user')
       ? credentials.principal.userEntityRef
       : undefined;
 
-    const serviceEntityRef = options.authServices.auth.isPrincipal(
+    const serviceEntityRef = this.authService.isPrincipal(
       credentials,
       'service',
     )
       ? credentials.principal.subject
       : undefined;
 
-    actor_id = userEntityRef ?? serviceEntityRef ?? 'unknown';
+    return userEntityRef ?? serviceEntityRef ?? '';
   }
-  if (options.actor_id) {
-    actor_id = options.actor_id;
+  async createAuditLogDetails(options: AuditLogDetailsOptions) {
+    const { eventName, stage, metadata, actor_id, request, response, status } =
+      options;
+
+    const actorId = actor_id || (await this.getActorId(request));
+
+    if (!actorId) {
+      throw new Error('No actor id was provided for audit log');
+    }
+
+    // Secrets in the body field should be redacted by the user before passing in the request object
+    const auditRequest = request
+      ? {
+          method: request.method,
+          url: request.originalUrl,
+          params: request.params,
+          query: request.query,
+          body: request.body,
+        }
+      : undefined;
+
+    const auditLogCommonDetails = {
+      actor: {
+        actorId,
+        ip: request?.ip,
+        hostname: request?.hostname,
+        userAgent: request?.get('user-agent'),
+      },
+      meta: metadata || {},
+      request: auditRequest,
+      isAuditLog: true as const,
+      response,
+      eventName,
+      stage,
+    };
+
+    if (status === 'failed') {
+      const errs = options.errors as ErrorLike[];
+      return {
+        ...auditLogCommonDetails,
+        status,
+        errors: errs.map(err => {
+          return {
+            name: err.name,
+            message: err.message,
+            stack: err.stack,
+          };
+        }),
+      };
+    }
+
+    return {
+      ...auditLogCommonDetails,
+      status,
+    };
   }
-  return {
-    timestamp: new Date().toISOString(),
-    actor: {
-      user_id: actor_id,
-      client: options.authServices?.request.get('user-agent'),
-      ip_address: options.authServices?.request.ip,
-    },
-    event_name: options.eventName,
-    status: options.status,
-    metadata: options.metadata,
-  };
+  async auditLog(options: AuditLogOptions): Promise<void> {
+    if (!(options.request && options.actor_id)) {
+      throw new Error('No actor id was provided for audit log');
+    }
+    const auditLogDetails = await this.createAuditLogDetails({
+      eventName: options.eventName,
+      status: 'succeeded',
+      stage: options.stage,
+      actor_id: options.actor_id,
+      request: options.request,
+      response: options.response,
+      metadata: options.metadata,
+    });
+
+    this.logger.info(options.message, auditLogDetails);
+  }
+
+  async auditErrorLog(options: AuditErrorLogOptions): Promise<void> {
+    if (!(options.request && options.actor_id)) {
+      throw new Error('No actor id was provided for audit log');
+    }
+    const auditLogDetails = await this.createAuditLogDetails({
+      eventName: options.eventName,
+      status: 'failed',
+      stage: options.stage,
+      errors: options.errors,
+      actor_id: options.actor_id,
+      request: options.request,
+      response: options.response,
+      metadata: options.metadata,
+    });
+
+    this.logger.error(options.message, auditLogDetails);
+  }
 }

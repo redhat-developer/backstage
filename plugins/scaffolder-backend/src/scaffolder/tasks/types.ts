@@ -16,7 +16,6 @@
 
 import { JsonValue, JsonObject, HumanDuration } from '@backstage/types';
 import { TaskSpec, TaskStep } from '@backstage/plugin-scaffolder-common';
-import { TaskSecrets } from '@backstage/plugin-scaffolder-node';
 import {
   TemplateAction,
   TaskStatus as _TaskStatus,
@@ -28,6 +27,7 @@ import {
   TaskBrokerDispatchOptions as _TaskBrokerDispatchOptions,
   TaskContext as _TaskContext,
   TaskBroker as _TaskBroker,
+  TaskSecrets,
 } from '@backstage/plugin-scaffolder-node';
 
 /**
