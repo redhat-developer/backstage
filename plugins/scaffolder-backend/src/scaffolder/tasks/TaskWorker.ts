@@ -29,6 +29,9 @@ import { ScmIntegrations } from '@backstage/integration';
 import { assertError, stringifyError } from '@backstage/errors';
 import { PermissionEvaluator } from '@backstage/plugin-permission-common';
 
+// TODO: Import from the common package once it's been published
+import { AuditLogger } from '../../util/auditLogging';
+
 /**
  * TaskWorkerOptions
  *
@@ -55,6 +58,7 @@ export type CreateWorkerOptions = {
   integrations: ScmIntegrations;
   workingDirectory: string;
   logger: Logger;
+  auditLogger: AuditLogger;
   additionalTemplateFilters?: Record<string, TemplateFilter>;
   /**
    * The number of tasks that can be executed at the same time by the worker
@@ -102,12 +106,14 @@ export class TaskWorker {
       concurrentTasksLimit = 10, // from 1 to Infinity
       additionalTemplateGlobals,
       permissions,
+      auditLogger,
     } = options;
 
     const workflowRunner = new NunjucksWorkflowRunner({
       actionRegistry,
       integrations,
       logger,
+      auditLogger,
       workingDirectory,
       additionalTemplateFilters,
       additionalTemplateGlobals,
