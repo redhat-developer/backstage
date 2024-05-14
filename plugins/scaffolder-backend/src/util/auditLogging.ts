@@ -164,7 +164,6 @@ export class DefaultAuditLogger implements AuditLogger {
       options;
 
     const actorId = actor_id || (await this.getActorId(request));
-
     if (!actorId) {
       throw new Error('No actor id was provided for audit log');
     }
@@ -216,16 +215,17 @@ export class DefaultAuditLogger implements AuditLogger {
     };
   }
   async auditLog(options: AuditLogOptions): Promise<void> {
-    if (!(options.request && options.actor_id)) {
+    if (!options.request && !options.actor_id) {
       throw new Error('No actor id was provided for audit log');
     }
+    // Typescript is being dumb here and seems to think it's possible for request and actor_id to both be undefined here
     const auditLogDetails = await this.createAuditLogDetails({
       eventName: options.eventName,
       status: 'succeeded',
       stage: options.stage,
-      actor_id: options.actor_id,
+      actor_id: options.actor_id!,
       request: options.request,
-      response: options.response,
+      response: options.response!,
       metadata: options.metadata,
     });
 
@@ -233,17 +233,19 @@ export class DefaultAuditLogger implements AuditLogger {
   }
 
   async auditErrorLog(options: AuditErrorLogOptions): Promise<void> {
-    if (!(options.request && options.actor_id)) {
+    if (!options.request && !options.actor_id) {
       throw new Error('No actor id was provided for audit log');
     }
+
+    // Typescript is being dumb here and seems to think it's possible for request and actor_id to both be undefined here
     const auditLogDetails = await this.createAuditLogDetails({
       eventName: options.eventName,
       status: 'failed',
       stage: options.stage,
       errors: options.errors,
-      actor_id: options.actor_id,
+      actor_id: options.actor_id!,
       request: options.request,
-      response: options.response,
+      response: options.response!,
       metadata: options.metadata,
     });
 

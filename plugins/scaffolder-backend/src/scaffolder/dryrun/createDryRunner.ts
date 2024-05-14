@@ -36,6 +36,7 @@ import fs from 'fs-extra';
 import { resolveSafeChildPath } from '@backstage/backend-common';
 import { PermissionEvaluator } from '@backstage/plugin-permission-common';
 import { BackstageCredentials } from '@backstage/backend-plugin-api';
+import { AuditLogger } from '../../util/auditLogging';
 
 interface DryRunInput {
   spec: TaskSpec;
@@ -53,6 +54,7 @@ interface DryRunResult {
 /** @internal */
 export type TemplateTesterCreateOptions = {
   logger: Logger;
+  auditLogger: AuditLogger;
   integrations: ScmIntegrations;
   actionRegistry: TemplateActionRegistry;
   workingDirectory: string;
