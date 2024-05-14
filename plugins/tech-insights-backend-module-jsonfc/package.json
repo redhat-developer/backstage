@@ -1,8 +1,9 @@
 {
   "name": "@backstage/plugin-tech-insights-backend-module-jsonfc",
-  "version": "0.1.49-next.1",
+  "version": "0.1.50",
   "backstage": {
-    "role": "backend-plugin-module"
+    "role": "backend-plugin-module",
+    "moved": "@backstage-community/plugin-tech-insights-backend-module-jsonfc"
   },
   "publishConfig": {
     "access": "public",
@@ -47,12 +48,12 @@
     "ajv": "^8.10.0",
     "json-rules-engine": "^6.1.2",
     "lodash": "^4.17.21",
-    "luxon": "^3.0.0",
-    "winston": "^3.2.1"
+    "luxon": "^3.0.0"
   },
   "devDependencies": {
     "@backstage/backend-test-utils": "workspace:^",
     "@backstage/cli": "workspace:^"
   },
-  "configSchema": "config.json"
+  "configSchema": "config.json",
+  "deprecated": "This package has been moved to the backstage/community-plugins repository. You should migrate to using @backstage-community/plugin-tech-insights-backend-module-jsonfc instead."
 }

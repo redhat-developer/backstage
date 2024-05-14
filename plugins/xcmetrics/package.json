@@ -1,9 +1,10 @@
 {
   "name": "@backstage/plugin-xcmetrics",
-  "version": "0.2.52-next.0",
+  "version": "0.2.53",
   "description": "A Backstage plugin that shows XCode build metrics for your components",
   "backstage": {
-    "role": "frontend-plugin"
+    "role": "frontend-plugin",
+    "moved": "@backstage-community/plugin-xcmetrics"
   },
   "publishConfig": {
     "access": "public",
@@ -49,9 +50,9 @@
     "@backstage/cli": "workspace:^",
     "@backstage/dev-utils": "workspace:^",
     "@backstage/test-utils": "workspace:^",
-    "@testing-library/dom": "^9.0.0",
+    "@testing-library/dom": "^10.0.0",
     "@testing-library/jest-dom": "^6.0.0",
-    "@testing-library/react": "^14.0.0",
+    "@testing-library/react": "^15.0.0",
     "@testing-library/user-event": "^14.0.0",
     "@types/luxon": "^3.0.0"
   },
@@ -59,5 +60,6 @@
     "react": "^16.13.1 || ^17.0.0 || ^18.0.0",
     "react-dom": "^16.13.1 || ^17.0.0 || ^18.0.0",
     "react-router-dom": "6.0.0-beta.0 || ^6.3.0"
-  }
+  },
+  "deprecated": "This package has been moved to the backstage/community-plugins repository. You should migrate to using @backstage-community/plugin-xcmetrics instead."
 }

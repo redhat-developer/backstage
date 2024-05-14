@@ -1,9 +1,10 @@
 {
   "name": "@backstage/plugin-kafka",
-  "version": "0.3.34-next.1",
+  "version": "0.3.35",
   "description": "A Backstage plugin that integrates towards Kafka",
   "backstage": {
-    "role": "frontend-plugin"
+    "role": "frontend-plugin",
+    "moved": "@backstage-community/plugin-kafka"
   },
   "publishConfig": {
     "access": "public",
@@ -47,9 +48,9 @@
     "@backstage/cli": "workspace:^",
     "@backstage/dev-utils": "workspace:^",
     "@backstage/test-utils": "workspace:^",
-    "@testing-library/dom": "^9.0.0",
+    "@testing-library/dom": "^10.0.0",
     "@testing-library/jest-dom": "^6.0.0",
-    "@testing-library/react": "^14.0.0",
+    "@testing-library/react": "^15.0.0",
     "jest-when": "^3.1.0"
   },
   "peerDependencies": {
@@ -57,5 +58,6 @@
     "react-dom": "^16.13.1 || ^17.0.0 || ^18.0.0",
     "react-router-dom": "6.0.0-beta.0 || ^6.3.0"
   },
-  "configSchema": "config.d.ts"
+  "configSchema": "config.d.ts",
+  "deprecated": "This package has been moved to the backstage/community-plugins repository. You should migrate to using @backstage-community/plugin-kafka instead."
 }

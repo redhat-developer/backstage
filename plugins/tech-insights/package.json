@@ -1,8 +1,9 @@
 {
   "name": "@backstage/plugin-tech-insights",
-  "version": "0.3.26-next.1",
+  "version": "0.3.27",
   "backstage": {
-    "role": "frontend-plugin"
+    "role": "frontend-plugin",
+    "moved": "@backstage-community/plugin-tech-insights"
   },
   "publishConfig": {
     "access": "public",
@@ -49,13 +50,14 @@
   "devDependencies": {
     "@backstage/cli": "workspace:^",
     "@backstage/dev-utils": "workspace:^",
-    "@testing-library/dom": "^9.0.0",
+    "@testing-library/dom": "^10.0.0",
     "@testing-library/jest-dom": "^6.0.0",
-    "@testing-library/react": "^14.0.0"
+    "@testing-library/react": "^15.0.0"
   },
   "peerDependencies": {
     "react": "^16.13.1 || ^17.0.0 || ^18.0.0",
     "react-dom": "^16.13.1 || ^17.0.0 || ^18.0.0",
     "react-router-dom": "6.0.0-beta.0 || ^6.3.0"
-  }
+  },
+  "deprecated": "This package has been moved to the backstage/community-plugins repository. You should migrate to using @backstage-community/plugin-tech-insights instead."
 }

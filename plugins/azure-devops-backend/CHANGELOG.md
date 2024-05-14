@@ -1,5 +1,48 @@
 # @backstage/plugin-azure-devops-backend
 
+## 0.6.5
+
+### Patch Changes
+
+- c2112f2: These packages have been migrated to the [backstage/community-plugins](https://github.com/backstage/community-plugins) repository.
+- Updated dependencies
+  - @backstage/plugin-azure-devops-common@0.4.2
+  - @backstage/backend-common@0.21.7
+  - @backstage/backend-plugin-api@0.6.17
+  - @backstage/catalog-model@1.4.5
+  - @backstage/config@1.2.0
+  - @backstage/errors@1.2.4
+  - @backstage/integration@1.10.0
+  - @backstage/plugin-auth-node@0.4.12
+  - @backstage/plugin-catalog-common@1.0.22
+  - @backstage/plugin-catalog-node@1.11.1
+  - @backstage/plugin-permission-common@0.7.13
+  - @backstage/plugin-permission-node@0.7.28
+
+## 0.6.4
+
+### Patch Changes
+
+- 95b0573: `getAllTeams` now accepts an optional `limit` parameter which can be used to return more than the default limit of 100 teams from the Azure DevOps API
+
+  `pullRequestOptions` have been equipped with `teamsLimit` so that the property can be used with `getAllTeams`
+
+- d5a1fe1: Replaced winston logger with `LoggerService`
+- c7c4053: Fixed a bug where the `azureDevOps.token` was not truly optional
+- Updated dependencies
+  - @backstage/backend-common@0.21.7
+  - @backstage/plugin-azure-devops-common@0.4.1
+  - @backstage/plugin-permission-node@0.7.28
+  - @backstage/backend-plugin-api@0.6.17
+  - @backstage/plugin-auth-node@0.4.12
+  - @backstage/integration@1.10.0
+  - @backstage/plugin-catalog-node@1.11.1
+  - @backstage/catalog-model@1.4.5
+  - @backstage/config@1.2.0
+  - @backstage/errors@1.2.4
+  - @backstage/plugin-catalog-common@1.0.22
+  - @backstage/plugin-permission-common@0.7.13
+
 ## 0.6.4-next.1
 
 ### Patch Changes

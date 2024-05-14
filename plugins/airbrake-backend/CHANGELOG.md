@@ -1,5 +1,26 @@
 # @backstage/plugin-airbrake-backend
 
+## 0.3.15
+
+### Patch Changes
+
+- c2112f2: These packages have been migrated to the [backstage/community-plugins](https://github.com/backstage/community-plugins) repository.
+- Updated dependencies
+  - @backstage/backend-common@0.21.7
+  - @backstage/backend-plugin-api@0.6.17
+  - @backstage/config@1.2.0
+
+## 0.3.14
+
+### Patch Changes
+
+- d5a1fe1: Replaced winston logger with `LoggerService`
+- e5a2ccc: Updated dependency `@types/http-proxy-middleware` to `^1.0.0`.
+- Updated dependencies
+  - @backstage/backend-common@0.21.7
+  - @backstage/backend-plugin-api@0.6.17
+  - @backstage/config@1.2.0
+
 ## 0.3.14-next.1
 
 ### Patch Changes

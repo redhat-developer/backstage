@@ -1,5 +1,34 @@
 # @backstage/plugin-stack-overflow
 
+## 0.1.30
+
+### Patch Changes
+
+- c2112f2: These packages have been migrated to the [backstage/community-plugins](https://github.com/backstage/community-plugins) repository.
+- Updated dependencies
+  - @backstage/config@1.2.0
+  - @backstage/core-components@0.14.4
+  - @backstage/core-plugin-api@1.9.2
+  - @backstage/frontend-plugin-api@0.6.4
+  - @backstage/plugin-home-react@0.1.12
+  - @backstage/plugin-search-common@1.2.11
+  - @backstage/plugin-search-react@1.7.10
+
+## 0.1.29
+
+### Patch Changes
+
+- abfbcfc: Updated dependency `@testing-library/react` to `^15.0.0`.
+- cb1e3b0: Updated dependency `@testing-library/dom` to `^10.0.0`.
+- Updated dependencies
+  - @backstage/plugin-search-react@1.7.10
+  - @backstage/plugin-home-react@0.1.12
+  - @backstage/core-components@0.14.4
+  - @backstage/core-plugin-api@1.9.2
+  - @backstage/frontend-plugin-api@0.6.4
+  - @backstage/config@1.2.0
+  - @backstage/plugin-search-common@1.2.11
+
 ## 0.1.29-next.1
 
 ### Patch Changes

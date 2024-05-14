@@ -1,8 +1,9 @@
 {
   "name": "@backstage/plugin-periskop-backend",
-  "version": "0.2.15-next.1",
+  "version": "0.2.16",
   "backstage": {
-    "role": "backend-plugin"
+    "role": "backend-plugin",
+    "moved": "@backstage-community/plugin-periskop-backend"
   },
   "publishConfig": {
     "access": "public"
@@ -52,12 +53,12 @@
     "express": "^4.17.1",
     "express-promise-router": "^4.1.0",
     "node-fetch": "^2.6.7",
-    "winston": "^3.2.1",
     "yn": "^4.0.0"
   },
   "devDependencies": {
     "@backstage/cli": "workspace:^",
     "@types/supertest": "^2.0.8",
     "supertest": "^6.1.6"
-  }
+  },
+  "deprecated": "This package has been moved to the backstage/community-plugins repository. You should migrate to using @backstage-community/plugin-periskop-backend instead."
 }

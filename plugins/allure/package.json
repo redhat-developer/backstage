@@ -1,9 +1,10 @@
 {
   "name": "@backstage/plugin-allure",
-  "version": "0.1.50-next.1",
+  "version": "0.1.51",
   "description": "A Backstage plugin that integrates with Allure",
   "backstage": {
-    "role": "frontend-plugin"
+    "role": "frontend-plugin",
+    "moved": "@backstage-community/plugin-allure"
   },
   "publishConfig": {
     "access": "public",
@@ -44,9 +45,9 @@
     "@backstage/cli": "workspace:^",
     "@backstage/dev-utils": "workspace:^",
     "@backstage/test-utils": "workspace:^",
-    "@testing-library/dom": "^9.0.0",
+    "@testing-library/dom": "^10.0.0",
     "@testing-library/jest-dom": "^6.0.0",
-    "@testing-library/react": "^14.0.0",
+    "@testing-library/react": "^15.0.0",
     "msw": "^1.0.0"
   },
   "peerDependencies": {
@@ -69,5 +70,6 @@
         }
       }
     }
-  }
+  },
+  "deprecated": "This package has been moved to the backstage/community-plugins repository. You should migrate to using @backstage-community/plugin-allure instead."
 }

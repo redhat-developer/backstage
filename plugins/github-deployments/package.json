@@ -1,9 +1,10 @@
 {
   "name": "@backstage/plugin-github-deployments",
-  "version": "0.1.65-next.1",
+  "version": "0.1.66",
   "description": "A Backstage plugin that integrates towards GitHub Deployments",
   "backstage": {
-    "role": "frontend-plugin"
+    "role": "frontend-plugin",
+    "moved": "@backstage-community/plugin-github-deployments"
   },
   "publishConfig": {
     "access": "public",
@@ -52,14 +53,15 @@
     "@backstage/core-app-api": "workspace:^",
     "@backstage/dev-utils": "workspace:^",
     "@backstage/test-utils": "workspace:^",
-    "@testing-library/dom": "^9.0.0",
+    "@testing-library/dom": "^10.0.0",
     "@testing-library/jest-dom": "^6.0.0",
-    "@testing-library/react": "^14.0.0",
+    "@testing-library/react": "^15.0.0",
     "msw": "^1.0.0"
   },
   "peerDependencies": {
     "react": "^16.13.1 || ^17.0.0 || ^18.0.0",
     "react-dom": "^16.13.1 || ^17.0.0 || ^18.0.0",
     "react-router-dom": "6.0.0-beta.0 || ^6.3.0"
-  }
+  },
+  "deprecated": "This package has been moved to the backstage/community-plugins repository. You should migrate to using @backstage-community/plugin-github-deployments instead."
 }

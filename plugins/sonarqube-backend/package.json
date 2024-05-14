@@ -1,8 +1,9 @@
 {
   "name": "@backstage/plugin-sonarqube-backend",
-  "version": "0.2.19-next.1",
+  "version": "0.2.20",
   "backstage": {
-    "role": "backend-plugin"
+    "role": "backend-plugin",
+    "moved": "@backstage-community/plugin-sonarqube-backend"
   },
   "publishConfig": {
     "access": "public",
@@ -40,7 +41,6 @@
     "express": "^4.18.1",
     "express-promise-router": "^4.1.0",
     "node-fetch": "^2.6.7",
-    "winston": "^3.2.1",
     "yn": "^5.0.0"
   },
   "devDependencies": {
@@ -50,5 +50,6 @@
     "msw": "^1.0.0",
     "supertest": "^6.2.4"
   },
-  "configSchema": "config.d.ts"
+  "configSchema": "config.d.ts",
+  "deprecated": "This package has been moved to the backstage/community-plugins repository. You should migrate to using @backstage-community/plugin-sonarqube-backend instead."
 }

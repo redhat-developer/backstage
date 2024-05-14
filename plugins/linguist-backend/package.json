@@ -1,8 +1,9 @@
 {
   "name": "@backstage/plugin-linguist-backend",
-  "version": "0.5.15-next.1",
+  "version": "0.5.16",
   "backstage": {
-    "role": "backend-plugin"
+    "role": "backend-plugin",
+    "moved": "@backstage-community/plugin-linguist-backend"
   },
   "publishConfig": {
     "access": "public",
@@ -52,7 +53,6 @@
     "luxon": "^3.0.0",
     "node-fetch": "^2.6.7",
     "uuid": "^9.0.0",
-    "winston": "^3.2.1",
     "yn": "^4.0.0"
   },
   "devDependencies": {
@@ -62,5 +62,6 @@
     "js-yaml": "^4.1.0",
     "supertest": "^6.2.4"
   },
-  "configSchema": "config.d.ts"
+  "configSchema": "config.d.ts",
+  "deprecated": "This package has been moved to the backstage/community-plugins repository. You should migrate to using @backstage-community/plugin-linguist-backend instead."
 }
