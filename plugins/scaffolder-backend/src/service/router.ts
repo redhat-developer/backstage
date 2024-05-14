@@ -509,7 +509,7 @@ export async function createRouter(
             ],
             message: `${await auditLogger.getActorId(
               req,
-            )} requested the parameter schema for ${requestedTemplateRef}`,
+            )} failed to request the parameter schema for ${requestedTemplateRef}`,
           });
           throw err;
         }
@@ -680,7 +680,7 @@ export async function createRouter(
           status: 201,
           body: { id: result.taskId },
         },
-        message: `Scaffolding task for ${templateRef} with taskId: ${result.taskId} created by ${userEntityRef} initiated`,
+        message: `Scaffolding task for ${templateRef} with taskId: ${result.taskId} successfully created by ${userEntityRef}`,
       });
       res.status(201).json({ id: result.taskId });
     })
@@ -850,7 +850,7 @@ export async function createRouter(
       logger.debug(`Event stream observing taskId '${taskId}' opened`);
       await auditLogger.auditLog({
         eventName: 'ScaffolderTaskStream',
-        stage: 'initiated',
+        stage: 'initiation',
         metadata: {
           taskId,
         },
@@ -936,7 +936,7 @@ export async function createRouter(
 
       await auditLogger.auditLog({
         eventName: 'ScaffolderTaskEventFetch',
-        stage: 'initiated',
+        stage: 'initiation',
         metadata: {
           taskId,
         },
