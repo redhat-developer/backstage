@@ -31,6 +31,8 @@ import {
 import { WorkflowRunner } from './types';
 import ObservableImpl from 'zen-observable';
 import waitForExpect from 'wait-for-expect';
+import { mockCredentials, mockServices } from '@backstage/backend-test-utils';
+import { DefaultAuditLogger } from '../../util/auditLogging';
 
 jest.mock('./NunjucksWorkflowRunner');
 const MockedNunjucksWorkflowRunner =
@@ -75,11 +77,23 @@ describe('TaskWorker', () => {
   });
 
   const logger = getVoidLogger();
+  const auditLogger = new DefaultAuditLogger({
+    logger,
+    authService: mockServices.auth({
+      pluginId: 'scaffolder',
+      disableDefaultAuthPolicy: false,
+    }),
+    httpAuthService: mockServices.httpAuth({
+      pluginId: 'scaffolder',
+      defaultCredentials: mockCredentials.user(),
+    }),
+  });
 
   it('should call the default workflow runner when the apiVersion is beta3', async () => {
-    const broker = new StorageTaskBroker(storage, logger);
+    const broker = new StorageTaskBroker(storage, logger, auditLogger);
     const taskWorker = await TaskWorker.create({
       logger,
+      auditLogger,
       workingDirectory,
       integrations,
       taskBroker: broker,
@@ -108,9 +122,10 @@ describe('TaskWorker', () => {
       output: { testOutput: 'testmockoutput' },
     });
 
-    const broker = new StorageTaskBroker(storage, logger);
+    const broker = new StorageTaskBroker(storage, logger, auditLogger);
     const taskWorker = await TaskWorker.create({
       logger,
+      auditLogger,
       workingDirectory,
       integrations,
       taskBroker: broker,
@@ -168,9 +183,20 @@ describe('Concurrent TaskWorker', () => {
   });
 
   const logger = getVoidLogger();
+  const auditLogger = new DefaultAuditLogger({
+    logger,
+    authService: mockServices.auth({
+      pluginId: 'scaffolder',
+      disableDefaultAuthPolicy: false,
+    }),
+    httpAuthService: mockServices.httpAuth({
+      pluginId: 'scaffolder',
+      defaultCredentials: mockCredentials.user(),
+    }),
+  });
 
   it('should be able to run multiple tasks at once', async () => {
-    const broker = new StorageTaskBroker(storage, logger);
+    const broker = new StorageTaskBroker(storage, logger, auditLogger);
 
     const dispatchANewTask = () =>
       broker.dispatch({
@@ -187,6 +213,7 @@ describe('Concurrent TaskWorker', () => {
     const expectedConcurrentTasks = 3;
     const taskWorker = await TaskWorker.create({
       logger,
+      auditLogger,
       workingDirectory,
       integrations,
       taskBroker: broker,
@@ -229,11 +256,23 @@ describe('Cancellable TaskWorker', () => {
   });
 
   const logger = getVoidLogger();
+  const auditLogger = new DefaultAuditLogger({
+    logger,
+    authService: mockServices.auth({
+      pluginId: 'scaffolder',
+      disableDefaultAuthPolicy: false,
+    }),
+    httpAuthService: mockServices.httpAuth({
+      pluginId: 'scaffolder',
+      defaultCredentials: mockCredentials.user(),
+    }),
+  });
 
   it('should be able to cancel the running task', async () => {
-    const taskBroker = new StorageTaskBroker(storage, logger);
+    const taskBroker = new StorageTaskBroker(storage, logger, auditLogger);
     const taskWorker = await TaskWorker.create({
       logger,
+      auditLogger,
       workingDirectory,
       integrations,
       taskBroker,
