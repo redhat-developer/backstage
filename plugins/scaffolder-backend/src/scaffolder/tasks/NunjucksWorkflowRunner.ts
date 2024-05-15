@@ -297,7 +297,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
             actor_id: 'scaffolder-backend',
             stage: 'completion',
             metadata: commonStepAuditMetadata,
-            message: `Skipping ${step.name} (id: ${step.id}) of task ${task.taskId}`,
+            message: `Skipped step ${step.name} (id: ${step.id}) of task ${task.taskId}`,
           });
           return;
         }
@@ -498,8 +498,11 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
             stage: 'completion',
             metadata: {
               ...commonStepAuditMetadata,
+              stepInputs: undefined,
+              stepAction: `${step.action}[${iteration.each.key}]`,
               stepIterationCount: iterationCount,
               stepIterationValue: iteration.each.value,
+              stepIterationInputs: iteration.input,
               totalIterations: iterations.length,
             },
             message: `Iteration ${iterationCount}/${iterations.length} of action ${step.action} of step ${step.name} (id: ${step.id}) of task ${task.taskId} succeeded`,
