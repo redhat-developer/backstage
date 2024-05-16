@@ -569,7 +569,7 @@ export async function createRouter(
 
       // Workaround ensure that redactedRequest.ip accesses the original req.ip with the correct context, preventing 'Illegal invocation' errors
       Object.defineProperty(redactedRequest, 'ip', {
-        get: function () {
+        get: () => {
           return req.ip;
         },
       });

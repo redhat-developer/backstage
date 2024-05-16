@@ -48,7 +48,6 @@ import {
 import { mockCredentials, mockServices } from '@backstage/backend-test-utils';
 import * as uuid from 'uuid';
 import { DefaultAuditLogger } from '../util/auditLogging';
-import { eventNames } from 'process';
 
 jest.mock('uuid');
 const uuidSpy = jest.spyOn(uuid, 'v4');
