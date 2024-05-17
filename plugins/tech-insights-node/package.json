@@ -1,8 +1,9 @@
 {
   "name": "@backstage/plugin-tech-insights-node",
-  "version": "0.5.3-next.1",
+  "version": "0.6.1",
   "backstage": {
-    "role": "node-library"
+    "role": "node-library",
+    "moved": "@backstage-community/plugin-tech-insights-node"
   },
   "publishConfig": {
     "access": "public",
@@ -41,10 +42,10 @@
     "@backstage/plugin-tech-insights-common": "workspace:^",
     "@backstage/types": "workspace:^",
     "@types/luxon": "^3.0.0",
-    "luxon": "^3.0.0",
-    "winston": "^3.2.1"
+    "luxon": "^3.0.0"
   },
   "devDependencies": {
     "@backstage/cli": "workspace:^"
-  }
+  },
+  "deprecated": "This package has been moved to the backstage/community-plugins repository. You should migrate to using @backstage-community/plugin-tech-insights-node instead."
 }

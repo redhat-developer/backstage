@@ -1,6 +1,6 @@
 {
   "name": "@backstage/core-compat-api",
-  "version": "0.2.4-next.1",
+  "version": "0.2.4",
   "backstage": {
     "role": "web-library"
   },
@@ -31,7 +31,6 @@
     "test": "backstage-cli package test"
   },
   "dependencies": {
-    "@backstage/core-app-api": "workspace:^",
     "@backstage/core-plugin-api": "workspace:^",
     "@backstage/frontend-plugin-api": "workspace:^",
     "@backstage/version-bridge": "workspace:^",
@@ -39,6 +38,7 @@
   },
   "devDependencies": {
     "@backstage/cli": "workspace:^",
+    "@backstage/core-app-api": "workspace:^",
     "@backstage/frontend-app-api": "workspace:^",
     "@backstage/frontend-test-utils": "workspace:^",
     "@backstage/plugin-catalog": "workspace:^",
@@ -46,7 +46,7 @@
     "@backstage/plugin-stackstorm": "workspace:^",
     "@oriflame/backstage-plugin-score-card": "^0.8.0",
     "@testing-library/jest-dom": "^6.0.0",
-    "@testing-library/react": "^14.0.0"
+    "@testing-library/react": "^15.0.0"
   },
   "peerDependencies": {
     "react": "^16.13.1 || ^17.0.0 || ^18.0.0",

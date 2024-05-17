@@ -1,9 +1,10 @@
 {
   "name": "@backstage/plugin-explore-react",
-  "version": "0.0.37",
+  "version": "0.0.39",
   "description": "A frontend library for Backstage plugins that want to interact with the explore plugin",
   "backstage": {
-    "role": "web-library"
+    "role": "web-library",
+    "moved": "@backstage-community/plugin-explore-react"
   },
   "publishConfig": {
     "access": "public",
@@ -41,14 +42,15 @@
   },
   "devDependencies": {
     "@backstage/cli": "workspace:^",
-    "@testing-library/dom": "^9.0.0",
+    "@testing-library/dom": "^10.0.0",
     "@testing-library/jest-dom": "^6.0.0",
-    "@testing-library/react": "^14.0.0",
+    "@testing-library/react": "^15.0.0",
     "@types/react": "^16.13.1 || ^17.0.0"
   },
   "peerDependencies": {
     "react": "^16.13.1 || ^17.0.0 || ^18.0.0",
     "react-dom": "^16.13.1 || ^17.0.0 || ^18.0.0",
     "react-router-dom": "6.0.0-beta.0 || ^6.3.0"
-  }
+  },
+  "deprecated": "This package has been moved to the backstage/community-plugins repository. You should migrate to using @backstage-community/plugin-explore-react instead."
 }

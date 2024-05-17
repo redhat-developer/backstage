@@ -1,5 +1,28 @@
 # @backstage/plugin-todo-backend
 
+## 0.3.17
+
+### Patch Changes
+
+- 89856da: These packages have been migrated to the [backstage/community-plugins](https://github.com/backstage/community-plugins) repository.
+
+## 0.3.16
+
+### Patch Changes
+
+- 2bd291e: Allow reserved characters in requests.
+- d5a1fe1: Replaced winston logger with `LoggerService`
+- Updated dependencies
+  - @backstage/backend-common@0.21.7
+  - @backstage/backend-plugin-api@0.6.17
+  - @backstage/catalog-client@1.6.4
+  - @backstage/integration@1.10.0
+  - @backstage/plugin-catalog-node@1.11.1
+  - @backstage/backend-openapi-utils@0.1.10
+  - @backstage/catalog-model@1.4.5
+  - @backstage/config@1.2.0
+  - @backstage/errors@1.2.4
+
 ## 0.3.16-next.1
 
 ### Patch Changes

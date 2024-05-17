@@ -95,6 +95,7 @@ module.exports = {
   plugins: [
     'docusaurus-plugin-sass',
     () => ({
+      name: 'yaml-loader',
       configureWebpack() {
         return {
           module: {
@@ -161,6 +162,15 @@ module.exports = {
             to: '/docs/getting-started/#next-steps',
           },
         ],
+      },
+    ],
+    [
+      'docusaurus-pushfeedback',
+      {
+        project: 'q8w1i6cair',
+        hideIcon: true,
+        customFont: true,
+        buttonStyle: 'dark',
       },
     ],
   ],
