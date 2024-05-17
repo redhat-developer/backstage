@@ -609,8 +609,8 @@ describe('createRouter', () => {
             body: {
               ...requestBody,
               secrets: {
-                password: '[REDACTED]',
-                token: '[REDACTED]',
+                password: '***',
+                token: '***',
               },
             },
             method: 'POST',
@@ -636,8 +636,8 @@ describe('createRouter', () => {
             body: {
               ...requestBody,
               secrets: {
-                password: '[REDACTED]',
-                token: '[REDACTED]',
+                password: '***',
+                token: '***',
               },
             },
             method: 'POST',
@@ -1685,8 +1685,8 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
             body: {
               ...requestBody,
               secrets: {
-                password: '[REDACTED]',
-                token: '[REDACTED]',
+                password: '***',
+                token: '***',
               },
             },
             method: 'POST',
@@ -1712,8 +1712,8 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
             body: {
               ...requestBody,
               secrets: {
-                password: '[REDACTED]',
-                token: '[REDACTED]',
+                password: '***',
+                token: '***',
               },
             },
             method: 'POST',

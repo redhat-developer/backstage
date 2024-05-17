@@ -25,7 +25,7 @@ import { JsonValue } from '@backstage/types';
 import { Request } from 'express';
 
 export type ActorDetails = {
-  actorId: string;
+  actorId: string | null;
   ip?: string;
   hostname?: string;
   userAgent?: string;
@@ -66,31 +66,24 @@ export type AuditLogDetails = {
   isAuditLog: true;
 } & AuditLogStatus;
 
-export type AuditActorOptions =
-  | {
-      actor_id: string;
-      request?: Request;
-    }
-  | {
-      actor_id?: string;
-      request: Request;
-    };
-
 export type AuditLogDetailsOptions = {
   eventName: string;
   stage: string;
   metadata?: JsonValue;
   response?: AuditResponse;
-} & AuditActorOptions &
-  ({ status: 'succeeded' } | { status: 'failed'; errors: unknown[] });
+  actor_id?: string;
+  request?: Request;
+} & ({ status: 'succeeded' } | { status: 'failed'; errors: unknown[] });
 
 export type AuditLogOptions = {
   eventName: string;
   message: string;
   stage: string;
+  actor_id?: string;
   metadata?: JsonValue;
   response?: AuditResponse;
-} & AuditActorOptions;
+  request?: Request;
+};
 
 export type AuditErrorLogOptions = AuditLogOptions & { errors: unknown[] };
 
@@ -108,9 +101,10 @@ export interface AuditLogger {
   getActorId(request?: Request): Promise<string | undefined>;
 
   /**
+   * Generates the audit log details to place in the metadata argument of the logger
    *
-   * Generates an AuditLogDetails object containing non-message details of the audit log
    * Secrets in the request body field should be redacted by the user before passing in the request object
+   * @public
    */
   createAuditLogDetails(
     options: AuditLogDetailsOptions,
@@ -166,10 +160,7 @@ export class DefaultAuditLogger implements AuditLogger {
     const { eventName, stage, metadata, actor_id, request, response, status } =
       options;
 
-    const actorId = actor_id || (await this.getActorId(request));
-    if (!actorId) {
-      throw new Error('No actor id was provided for audit log');
-    }
+    const actorId = actor_id || (await this.getActorId(request)) || null;
 
     // Secrets in the body field should be redacted by the user before passing in the request object
     const auditRequest = request
@@ -218,37 +209,27 @@ export class DefaultAuditLogger implements AuditLogger {
     };
   }
   async auditLog(options: AuditLogOptions): Promise<void> {
-    if (!options.request && !options.actor_id) {
-      throw new Error('No actor id was provided for audit log');
-    }
-    // Typescript is being dumb here and seems to think it's possible for request and actor_id to both be undefined here
     const auditLogDetails = await this.createAuditLogDetails({
       eventName: options.eventName,
       status: 'succeeded',
       stage: options.stage,
-      actor_id: options.actor_id!,
+      actor_id: options.actor_id,
       request: options.request,
-      response: options.response!,
+      response: options.response,
       metadata: options.metadata,
     });
-
     this.logger.info(options.message, auditLogDetails);
   }
 
   async auditErrorLog(options: AuditErrorLogOptions): Promise<void> {
-    if (!options.request && !options.actor_id) {
-      throw new Error('No actor id was provided for audit log');
-    }
-
-    // Typescript is being dumb here and seems to think it's possible for request and actor_id to both be undefined here
     const auditLogDetails = await this.createAuditLogDetails({
       eventName: options.eventName,
       status: 'failed',
       stage: options.stage,
       errors: options.errors,
-      actor_id: options.actor_id!,
+      actor_id: options.actor_id,
       request: options.request,
-      response: options.response!,
+      response: options.response,
       metadata: options.metadata,
     });
 

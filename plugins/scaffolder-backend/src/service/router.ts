@@ -579,7 +579,7 @@ export async function createRouter(
           secrets: Object.keys(req.body.secrets).reduce((acc, key) => {
             return {
               ...acc,
-              [key]: '[REDACTED]',
+              [key]: '***',
             };
           }, {} as TaskSecrets),
         };
