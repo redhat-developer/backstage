@@ -95,8 +95,8 @@ export type AuditLoggerOptions = {
 
 export interface AuditLogger {
   /**
-   *
    * Processes an express request and obtains the actorId from it. Returns undefined if actorId is not obtainable.
+   * @public
    */
   getActorId(request?: Request): Promise<string | undefined>;
 
@@ -111,14 +111,18 @@ export interface AuditLogger {
   ): Promise<AuditLogDetails>;
 
   /**
-   *
    * Generates an Audit Log and logs it at the info level
+   *
+   * Secrets in the request body field should be redacted by the user before passing in the request object
+   * @public
    */
   auditLog(options: AuditLogOptions): Promise<void>;
 
   /**
-   *
    * Generates an Audit Log for an error and logs it at the error level
+   *
+   * Secrets in the request body field should be redacted by the user before passing in the request object
+   * @public
    */
   auditErrorLog(options: AuditErrorLogOptions): Promise<void>;
 }
