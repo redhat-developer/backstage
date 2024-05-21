@@ -345,7 +345,6 @@ describe('createRouter', () => {
           },
         };
         const response = await request(app).post('/v2/tasks').send(requestBody);
-        // TODO: add the expected validation error
         const error = [
           {
             argument: 'requiredParameter1',
@@ -419,6 +418,7 @@ describe('createRouter', () => {
           auditErrorLogMeta,
         );
         expect(response.status).toEqual(400);
+        expect(response.body).toEqual({ errors: error });
       });
 
       it('return the template id', async () => {
