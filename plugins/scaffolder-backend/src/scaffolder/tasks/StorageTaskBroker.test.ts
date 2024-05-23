@@ -159,7 +159,7 @@ describe('StorageTaskBroker', () => {
 
     const auditLogEntry = {
       ...commonAuditLogMeta,
-      eventName: 'ScaffolderTask',
+      eventName: 'ScaffolderTaskExecution',
       stage: 'completion',
       meta: {
         taskId: dispatchResult.taskId,
@@ -200,7 +200,7 @@ describe('StorageTaskBroker', () => {
 
     const auditLogEntry = {
       ...commonAuditErrorMeta,
-      eventName: 'ScaffolderTask',
+      eventName: 'ScaffolderTaskExecution',
       stage: 'completion',
       meta: {
         taskId: dispatchResult.taskId,
@@ -225,7 +225,7 @@ describe('StorageTaskBroker', () => {
 
     const auditLogEntry = {
       ...commonAuditLogMeta,
-      eventName: 'ScaffolderTask',
+      eventName: 'ScaffolderTaskExecution',
       stage: 'completion',
       meta: {
         taskId: dispatchResult.taskId,
@@ -276,7 +276,7 @@ describe('StorageTaskBroker', () => {
     ]);
     const auditLogEntry = {
       ...commonAuditLogMeta,
-      eventName: 'ScaffolderTask',
+      eventName: 'ScaffolderTaskExecution',
       stage: 'completion',
       meta: {
         taskId: taskId,

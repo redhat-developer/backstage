@@ -505,22 +505,22 @@ describe('createRouter', () => {
 
       it('should emit auditlog containing user identifier when backstage auth is passed', async () => {
         const mockToken = mockCredentials.user.token();
-
+        const templateParameters = {
+          requiredParameter1: 'required-value-1',
+          requiredParameter2: 'required-value-2',
+        };
         const requestBody = {
           templateRef: stringifyEntityRef({
             kind: 'template',
             name: 'create-react-app-template',
           }),
-          values: {
-            requiredParameter1: 'required-value-1',
-            requiredParameter2: 'required-value-2',
-          },
+          values: templateParameters,
         };
         await request(app)
           .post('/v2/tasks')
           .set('Authorization', `Bearer ${mockToken}`)
           .send(requestBody);
-        expect(loggerSpy).toHaveBeenCalledTimes(3);
+        expect(loggerSpy).toHaveBeenCalledTimes(4);
         const auditInitiationLogMeta = {
           ...commonAuditLogMeta,
           eventName: 'ScaffolderTaskCreation',
@@ -560,6 +560,20 @@ describe('createRouter', () => {
           },
           stage: 'completion',
         };
+        const auditLogTaskInitMeta = {
+          actor: {
+            actorId: 'scaffolder-backend',
+          },
+          eventName: 'ScaffolderTaskExecution',
+          isAuditLog: true,
+          meta: {
+            taskId: 'a-random-id',
+            templateRef: 'template:default/create-react-app-template',
+            taskParameters: templateParameters,
+          },
+          stage: 'initiation',
+          status: 'succeeded',
+        };
         expect(loggerSpy).toHaveBeenNthCalledWith(
           2,
           'Scaffolding task for template:default/create-react-app-template created by user:default/mock',
@@ -568,6 +582,11 @@ describe('createRouter', () => {
           3,
           'Scaffolding task for template:default/create-react-app-template with taskId: a-random-id successfully created by user:default/mock',
           auditSuccessLogMeta,
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          4,
+          'Scaffolding task with taskId: a-random-id initiated',
+          auditLogTaskInitMeta,
         );
       });
       it('should redact secrets in the request body in the audit log', async () => {
@@ -1581,22 +1600,22 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
 
       it('should emit auditlog containing user identifier when backstage auth is passed', async () => {
         const mockToken = mockCredentials.user.token();
-
+        const templateParameters = {
+          requiredParameter1: 'required-value-1',
+          requiredParameter2: 'required-value-2',
+        };
         const requestBody = {
           templateRef: stringifyEntityRef({
             kind: 'template',
             name: 'create-react-app-template',
           }),
-          values: {
-            requiredParameter1: 'required-value-1',
-            requiredParameter2: 'required-value-2',
-          },
+          values: templateParameters,
         };
         await request(app)
           .post('/v2/tasks')
           .set('Authorization', `Bearer ${mockToken}`)
           .send(requestBody);
-        expect(loggerSpy).toHaveBeenCalledTimes(3);
+        expect(loggerSpy).toHaveBeenCalledTimes(4);
         const auditInitiationLogMeta = {
           ...commonAuditLogMeta,
           eventName: 'ScaffolderTaskCreation',
@@ -1636,6 +1655,20 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
           },
           stage: 'completion',
         };
+        const auditLogTaskInitMeta = {
+          actor: {
+            actorId: 'scaffolder-backend',
+          },
+          eventName: 'ScaffolderTaskExecution',
+          isAuditLog: true,
+          meta: {
+            taskId: 'a-random-id',
+            templateRef: 'template:default/create-react-app-template',
+            taskParameters: templateParameters,
+          },
+          stage: 'initiation',
+          status: 'succeeded',
+        };
         expect(loggerSpy).toHaveBeenNthCalledWith(
           2,
           'Scaffolding task for template:default/create-react-app-template created by user:default/mock',
@@ -1644,6 +1677,11 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
           3,
           'Scaffolding task for template:default/create-react-app-template with taskId: a-random-id successfully created by user:default/mock',
           auditSuccessLogMeta,
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          4,
+          'Scaffolding task with taskId: a-random-id initiated',
+          auditLogTaskInitMeta,
         );
       });
       it('should redact secrets in the request body in the audit log', async () => {
