@@ -294,7 +294,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
           await stepTrack.skipFalsy();
           await this.options.auditLogger.auditLog({
             eventName: 'ScaffolderTaskStepSkip',
-            actor_id: 'scaffolder-backend',
+            actorId: 'scaffolder-backend',
             stage: 'completion',
             metadata: commonStepAuditMetadata,
             message: `Skipped step ${step.name} (id: ${step.id}) of task ${task.taskId}`,
@@ -312,7 +312,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
       });
 
       await this.options.auditLogger.auditLog({
-        actor_id: 'scaffolder-backend',
+        actorId: 'scaffolder-backend',
         eventName: 'ScaffolderTaskStepExecution',
         stage: 'initiation',
         metadata: commonStepAuditMetadata,
@@ -410,7 +410,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
           );
 
           await this.options.auditLogger.auditLog({
-            actor_id: 'scaffolder-backend',
+            actorId: 'scaffolder-backend',
             eventName: 'ScaffolderTaskStepIteration',
             stage: 'initiation',
             metadata: {
@@ -493,7 +493,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
         });
         if (iteration.each) {
           await this.options.auditLogger.auditLog({
-            actor_id: 'scaffolder-backend',
+            actorId: 'scaffolder-backend',
             eventName: 'ScaffolderTaskStepIteration',
             stage: 'completion',
             metadata: {
@@ -703,7 +703,7 @@ function scaffoldingTracker(auditLogger: AuditLogger) {
       });
       stepTimer({ result: 'ok' });
       await auditLogger.auditLog({
-        actor_id: 'scaffolder-backend',
+        actorId: 'scaffolder-backend',
         eventName: 'ScaffolderTaskStepExecution',
         stage: 'completion',
         metadata: {
@@ -735,7 +735,7 @@ function scaffoldingTracker(auditLogger: AuditLogger) {
       });
       stepTimer({ result: 'failed' });
       await auditLogger.auditErrorLog({
-        actor_id: 'scaffolder-backend',
+        actorId: 'scaffolder-backend',
         eventName: 'ScaffolderTaskStepExecution',
         stage: 'completion',
         metadata: {

@@ -179,7 +179,7 @@ export class TaskWorker {
     try {
       await this.auditLogger?.auditLog({
         eventName: 'ScaffolderTaskExecution',
-        actor_id: 'scaffolder-backend',
+        actorId: 'scaffolder-backend',
         stage: 'initiation',
         metadata: {
           taskId: task.taskId,

@@ -20,7 +20,7 @@ import {
   LoggerService,
 } from '@backstage/backend-plugin-api';
 import { ErrorLike } from '@backstage/errors';
-import { JsonValue } from '@backstage/types';
+import { JsonObject, JsonValue } from '@backstage/types';
 
 import { Request } from 'express';
 
@@ -44,12 +44,13 @@ export type AuditResponse = {
   body?: any;
 };
 
-export type AuditLogStatus =
-  | {
-      status: 'failed';
-      errors: ErrorLike[];
-    }
-  | { status: 'succeeded' };
+export type AuditLogSuccessStatus = { status: 'succeeded' };
+export type AuditLogFailureStatus = {
+  status: 'failed';
+  errors: ErrorLike[];
+};
+
+export type AuditLogStatus = AuditLogSuccessStatus | AuditLogFailureStatus;
 
 /**
  * Common fields of an audit log. Note: timestamp and pluginId are automatically added at log creation.
@@ -71,7 +72,7 @@ export type AuditLogDetailsOptions = {
   stage: string;
   metadata?: JsonValue;
   response?: AuditResponse;
-  actor_id?: string;
+  actorId?: string;
   request?: Request;
 } & ({ status: 'succeeded' } | { status: 'failed'; errors: unknown[] });
 
@@ -79,13 +80,16 @@ export type AuditLogOptions = {
   eventName: string;
   message: string;
   stage: string;
-  actor_id?: string;
+  level?: 'info' | 'debug' | 'warn' | 'error';
+  actorId?: string;
   metadata?: JsonValue;
   response?: AuditResponse;
   request?: Request;
 };
 
-export type AuditErrorLogOptions = AuditLogOptions & { errors: unknown[] };
+export type AuditErrorLogOptions = Omit<AuditLogOptions, 'level'> & {
+  errors: unknown[];
+};
 
 export type AuditLoggerOptions = {
   logger: LoggerService;
@@ -96,6 +100,7 @@ export type AuditLoggerOptions = {
 export interface AuditLogger {
   /**
    * Processes an express request and obtains the actorId from it. Returns undefined if actorId is not obtainable.
+   *
    * @public
    */
   getActorId(request?: Request): Promise<string | undefined>;
@@ -103,7 +108,7 @@ export interface AuditLogger {
   /**
    * Generates the audit log details to place in the metadata argument of the logger
    *
-   * Secrets in the request body field should be redacted by the user before passing in the request object
+   * Secrets in the metadata field and request body, params and query field should be redacted by the user before passing in the request object
    * @public
    */
   createAuditLogDetails(
@@ -113,7 +118,7 @@ export interface AuditLogger {
   /**
    * Generates an Audit Log and logs it at the info level
    *
-   * Secrets in the request body field should be redacted by the user before passing in the request object
+   * Secrets in the metadata field and request body, params and query field should be redacted by the user before passing in the request object
    * @public
    */
   auditLog(options: AuditLogOptions): Promise<void>;
@@ -121,7 +126,7 @@ export interface AuditLogger {
   /**
    * Generates an Audit Log for an error and logs it at the error level
    *
-   * Secrets in the request body field should be redacted by the user before passing in the request object
+   * Secrets in the metadata field and request body, params and query field should be redacted by the user before passing in the request object
    * @public
    */
   auditErrorLog(options: AuditErrorLogOptions): Promise<void>;
@@ -160,11 +165,12 @@ export class DefaultAuditLogger implements AuditLogger {
       return undefined;
     }
   }
-  async createAuditLogDetails(options: AuditLogDetailsOptions) {
-    const { eventName, stage, metadata, actor_id, request, response, status } =
-      options;
+  async createAuditLogDetails(
+    options: AuditLogDetailsOptions,
+  ): Promise<AuditLogDetails> {
+    const { eventName, stage, metadata, request, response, status } = options;
 
-    const actorId = actor_id || (await this.getActorId(request)) || null;
+    const actorId = options.actorId || (await this.getActorId(request)) || null;
 
     // Secrets in the body field should be redacted by the user before passing in the request object
     const auditRequest = request
@@ -177,13 +183,15 @@ export class DefaultAuditLogger implements AuditLogger {
         }
       : undefined;
 
+    const actor: ActorDetails = { actorId };
+    if (request) {
+      actor.ip = request.ip;
+      actor.hostname = request.hostname;
+      actor.userAgent = request.get('user-agent');
+    }
+
     const auditLogCommonDetails = {
-      actor: {
-        actorId,
-        ip: request?.ip,
-        hostname: request?.hostname,
-        userAgent: request?.get('user-agent'),
-      },
+      actor,
       meta: metadata || {},
       request: auditRequest,
       isAuditLog: true as const,
@@ -191,6 +199,13 @@ export class DefaultAuditLogger implements AuditLogger {
       eventName,
       stage,
     };
+
+    if (auditRequest) {
+      auditLogCommonDetails.request = auditRequest;
+    }
+    if (response) {
+      auditLogCommonDetails.response = response;
+    }
 
     if (status === 'failed') {
       const errs = options.errors as ErrorLike[];
@@ -213,16 +228,32 @@ export class DefaultAuditLogger implements AuditLogger {
     };
   }
   async auditLog(options: AuditLogOptions): Promise<void> {
+    const logLevel = options.level || 'info';
     const auditLogDetails = await this.createAuditLogDetails({
       eventName: options.eventName,
       status: 'succeeded',
       stage: options.stage,
-      actor_id: options.actor_id,
+      actorId: options.actorId,
       request: options.request,
       response: options.response,
       metadata: options.metadata,
     });
-    this.logger.info(options.message, auditLogDetails);
+    switch (logLevel) {
+      case 'info':
+        this.logger.info(options.message, auditLogDetails as JsonObject);
+        return;
+      case 'debug':
+        this.logger.debug(options.message, auditLogDetails as JsonObject);
+        return;
+      case 'warn':
+        this.logger.warn(options.message, auditLogDetails as JsonObject);
+        return;
+      case 'error':
+        this.logger.error(options.message, auditLogDetails as JsonObject);
+        return;
+      default:
+        throw new Error(`Log level of ${logLevel} is not supported`);
+    }
   }
 
   async auditErrorLog(options: AuditErrorLogOptions): Promise<void> {
@@ -231,12 +262,12 @@ export class DefaultAuditLogger implements AuditLogger {
       status: 'failed',
       stage: options.stage,
       errors: options.errors,
-      actor_id: options.actor_id,
+      actorId: options.actorId,
       request: options.request,
       response: options.response,
       metadata: options.metadata,
     });
 
-    this.logger.error(options.message, auditLogDetails);
+    this.logger.error(options.message, auditLogDetails as JsonObject);
   }
 }

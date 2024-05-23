@@ -589,7 +589,7 @@ export async function createRouter(
       await auditLogger.auditLog({
         eventName: 'ScaffolderTaskCreation',
         stage: 'initiation',
-        actor_id: userEntityRef,
+        actorId: userEntityRef,
         request: redactedRequest,
         metadata: {
           templateRef: templateRef,
@@ -607,7 +607,7 @@ export async function createRouter(
           await auditLogger.auditErrorLog({
             eventName: 'ScaffolderTaskCreation',
             stage: 'completion',
-            actor_id: userEntityRef,
+            actorId: userEntityRef,
             request: redactedRequest,
             metadata: {
               templateRef: templateRef,
@@ -670,7 +670,7 @@ export async function createRouter(
       await auditLogger.auditLog({
         eventName: 'ScaffolderTaskCreation',
         stage: 'completion',
-        actor_id: userEntityRef,
+        actorId: userEntityRef,
         request: redactedRequest,
         metadata: {
           taskId: result.taskId,
@@ -1039,7 +1039,7 @@ export async function createRouter(
         await auditLogger.auditLog({
           eventName: 'ScaffolderTaskDryRun',
           stage: 'initiation',
-          actor_id: userEntityRef,
+          actorId: userEntityRef,
           metadata: {
             isDryRun: true,
           },
@@ -1052,7 +1052,7 @@ export async function createRouter(
             await auditLogger.auditErrorLog({
               eventName: 'ScaffolderTaskDryRun',
               stage: 'completion',
-              actor_id: userEntityRef,
+              actorId: userEntityRef,
               metadata: {
                 templateRef: templateRef,
                 parameters: template.spec.parameters,
@@ -1107,7 +1107,7 @@ export async function createRouter(
         await auditLogger.auditLog({
           eventName: 'ScaffolderTaskDryRun',
           stage: 'completion',
-          actor_id: userEntityRef,
+          actorId: userEntityRef,
           metadata: {
             templateRef: templateRef,
             parameters: template.spec.parameters,
