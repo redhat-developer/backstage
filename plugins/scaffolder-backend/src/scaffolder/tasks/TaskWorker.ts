@@ -181,6 +181,7 @@ export class TaskWorker {
         eventName: 'ScaffolderTaskExecution',
         actorId: 'scaffolder-backend',
         stage: 'initiation',
+        status: 'succeeded',
         metadata: {
           taskId: task.taskId,
           taskParameters: task.spec.parameters,

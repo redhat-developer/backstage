@@ -443,6 +443,7 @@ export async function createRouter(
           await auditLogger.auditLog({
             eventName: 'ScaffolderParameterSchemaFetch',
             stage: 'initiation',
+            status: 'succeeded',
             metadata: {
               templateRef: requestedTemplateRef,
             },
@@ -478,6 +479,7 @@ export async function createRouter(
           await auditLogger.auditLog({
             eventName: 'ScaffolderParameterSchemaFetch',
             stage: 'completion',
+            status: 'succeeded',
             metadata: {
               templateRef: templateRef,
             },
@@ -493,9 +495,11 @@ export async function createRouter(
 
           res.json(responseBody);
         } catch (err) {
-          await auditLogger.auditErrorLog({
+          await auditLogger.auditLog({
             eventName: 'ScaffolderParameterSchemaFetch',
             stage: 'completion',
+            status: 'failed',
+            level: 'error',
             request: req,
             metadata: {
               templateRef: requestedTemplateRef,
@@ -519,6 +523,7 @@ export async function createRouter(
       await auditLogger.auditLog({
         eventName: 'ScaffolderInstalledActionsFetch',
         stage: 'initiation',
+        status: 'succeeded',
         request: req,
         message: `${await auditLogger.getActorId(
           req,
@@ -535,6 +540,7 @@ export async function createRouter(
       await auditLogger.auditLog({
         eventName: 'ScaffolderInstalledActionsFetch',
         stage: 'completion',
+        status: 'succeeded',
         request: req,
         response: {
           status: 200,
@@ -589,6 +595,7 @@ export async function createRouter(
       await auditLogger.auditLog({
         eventName: 'ScaffolderTaskCreation',
         stage: 'initiation',
+        status: 'succeeded',
         actorId: userEntityRef,
         request: redactedRequest,
         metadata: {
@@ -604,9 +611,11 @@ export async function createRouter(
       for (const parameters of [template.spec.parameters ?? []].flat()) {
         const result = validate(values, parameters);
         if (!result.valid) {
-          await auditLogger.auditErrorLog({
+          await auditLogger.auditLog({
             eventName: 'ScaffolderTaskCreation',
             stage: 'completion',
+            status: 'failed',
+            level: 'error',
             actorId: userEntityRef,
             request: redactedRequest,
             metadata: {
@@ -670,6 +679,7 @@ export async function createRouter(
       await auditLogger.auditLog({
         eventName: 'ScaffolderTaskCreation',
         stage: 'completion',
+        status: 'succeeded',
         actorId: userEntityRef,
         request: redactedRequest,
         metadata: {
@@ -690,6 +700,7 @@ export async function createRouter(
         await auditLogger.auditLog({
           eventName: 'ScaffolderTaskListFetch',
           stage: 'initiation',
+          status: 'succeeded',
           request: req,
           message: `${await auditLogger.getActorId(
             req,
@@ -714,6 +725,7 @@ export async function createRouter(
         await auditLogger.auditLog({
           eventName: 'ScaffolderTaskListFetch',
           stage: 'completion',
+          status: 'succeeded',
           request: req,
           response: {
             status: 200,
@@ -729,9 +741,11 @@ export async function createRouter(
         if (err.name === 'InputError') {
           status = 400;
         }
-        await auditLogger.auditErrorLog({
+        await auditLogger.auditLog({
           eventName: 'ScaffolderTaskListFetch',
           stage: 'completion',
+          status: 'failed',
+          level: 'error',
           request: req,
           response: {
             status: status,
@@ -756,6 +770,7 @@ export async function createRouter(
         await auditLogger.auditLog({
           eventName: 'ScaffolderTaskFetch',
           stage: 'initiation',
+          status: 'succeeded',
           metadata: {
             taskId: taskId,
           },
@@ -773,6 +788,7 @@ export async function createRouter(
         await auditLogger.auditLog({
           eventName: 'ScaffolderTaskFetch',
           stage: 'completion',
+          status: 'succeeded',
           request: req,
           response: {
             status: 200,
@@ -788,9 +804,11 @@ export async function createRouter(
         if (err.name === 'NotFoundError') {
           status = 404;
         }
-        await auditLogger.auditErrorLog({
+        await auditLogger.auditLog({
           eventName: 'ScaffolderTaskFetch',
           stage: 'completion',
+          status: 'failed',
+          level: 'error',
           request: req,
           response: {
             status: status,
@@ -815,6 +833,7 @@ export async function createRouter(
       await auditLogger.auditLog({
         eventName: 'ScaffolderTaskCancellation',
         stage: 'initiation',
+        status: 'succeeded',
         metadata: {
           taskId,
         },
@@ -827,6 +846,7 @@ export async function createRouter(
       await auditLogger.auditLog({
         eventName: 'ScaffolderTaskCancellation',
         stage: 'initiation',
+        status: 'succeeded',
         metadata: {
           taskId,
         },
@@ -851,6 +871,7 @@ export async function createRouter(
       await auditLogger.auditLog({
         eventName: 'ScaffolderTaskStream',
         stage: 'initiation',
+        status: 'succeeded',
         metadata: {
           taskId,
         },
@@ -872,9 +893,11 @@ export async function createRouter(
           logger.error(
             `Received error from event stream when observing taskId '${taskId}', ${error}`,
           );
-          await auditLogger.auditErrorLog({
+          await auditLogger.auditLog({
             eventName: 'ScaffolderTaskStream',
             stage: 'completion',
+            status: 'failed',
+            level: 'error',
             metadata: {
               taskId,
             },
@@ -920,6 +943,7 @@ export async function createRouter(
         await auditLogger.auditLog({
           eventName: 'ScaffolderTaskStream',
           stage: 'completion',
+          status: 'succeeded',
           metadata: {
             taskId,
           },
@@ -937,6 +961,7 @@ export async function createRouter(
       await auditLogger.auditLog({
         eventName: 'ScaffolderTaskEventFetch',
         stage: 'initiation',
+        status: 'succeeded',
         metadata: {
           taskId,
         },
@@ -956,9 +981,11 @@ export async function createRouter(
           logger.error(
             `Received error from event stream when observing taskId '${taskId}', ${error}`,
           );
-          await auditLogger.auditErrorLog({
+          await auditLogger.auditLog({
             eventName: 'ScaffolderTaskEventFetch',
             stage: 'completion',
+            status: 'failed',
+            level: 'error',
             metadata: {
               taskId,
             },
@@ -981,6 +1008,7 @@ export async function createRouter(
           await auditLogger.auditLog({
             eventName: 'ScaffolderTaskEventFetch',
             stage: 'completion',
+            status: 'succeeded',
             metadata: {
               taskId,
             },
@@ -1039,6 +1067,7 @@ export async function createRouter(
         await auditLogger.auditLog({
           eventName: 'ScaffolderTaskDryRun',
           stage: 'initiation',
+          status: 'succeeded',
           actorId: userEntityRef,
           metadata: {
             isDryRun: true,
@@ -1049,9 +1078,11 @@ export async function createRouter(
         for (const parameters of [template.spec.parameters ?? []].flat()) {
           const result = validate(body.values, parameters);
           if (!result.valid) {
-            await auditLogger.auditErrorLog({
+            await auditLogger.auditLog({
               eventName: 'ScaffolderTaskDryRun',
               stage: 'completion',
+              status: 'failed',
+              level: 'error',
               actorId: userEntityRef,
               metadata: {
                 templateRef: templateRef,
@@ -1107,6 +1138,7 @@ export async function createRouter(
         await auditLogger.auditLog({
           eventName: 'ScaffolderTaskDryRun',
           stage: 'completion',
+          status: 'succeeded',
           actorId: userEntityRef,
           metadata: {
             templateRef: templateRef,
@@ -1126,9 +1158,11 @@ export async function createRouter(
         if (err.name === 'InputError') {
           status = 400;
         }
-        await auditLogger.auditErrorLog({
+        await auditLogger.auditLog({
           eventName: 'ScaffolderTaskDryRun',
           stage: 'completion',
+          status: 'failed',
+          level: 'error',
           request: req,
           metadata: {
             isDryRun: true,

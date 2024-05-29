@@ -296,6 +296,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
             eventName: 'ScaffolderTaskStepSkip',
             actorId: 'scaffolder-backend',
             stage: 'completion',
+            status: 'succeeded',
             metadata: commonStepAuditMetadata,
             message: `Skipped step ${step.name} (id: ${step.id}) of task ${task.taskId}`,
           });
@@ -315,6 +316,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
         actorId: 'scaffolder-backend',
         eventName: 'ScaffolderTaskStepExecution',
         stage: 'initiation',
+        status: 'succeeded',
         metadata: commonStepAuditMetadata,
         message: `Started ${step.name} (id: ${step.id}) of task ${task.taskId} triggering the ${step.action} action`,
       });
@@ -413,6 +415,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
             actorId: 'scaffolder-backend',
             eventName: 'ScaffolderTaskStepIteration',
             stage: 'initiation',
+            status: 'succeeded',
             metadata: {
               ...commonStepAuditMetadata,
               stepInputs: undefined,
@@ -496,6 +499,7 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
             actorId: 'scaffolder-backend',
             eventName: 'ScaffolderTaskStepIteration',
             stage: 'completion',
+            status: 'succeeded',
             metadata: {
               ...commonStepAuditMetadata,
               stepInputs: undefined,
@@ -706,6 +710,7 @@ function scaffoldingTracker(auditLogger: AuditLogger) {
         actorId: 'scaffolder-backend',
         eventName: 'ScaffolderTaskStepExecution',
         stage: 'completion',
+        status: 'succeeded',
         metadata: {
           templateRef: template,
           taskId: task.taskId,
@@ -734,10 +739,12 @@ function scaffoldingTracker(auditLogger: AuditLogger) {
         result: 'failed',
       });
       stepTimer({ result: 'failed' });
-      await auditLogger.auditErrorLog({
+      await auditLogger.auditLog({
         actorId: 'scaffolder-backend',
         eventName: 'ScaffolderTaskStepExecution',
         stage: 'completion',
+        status: 'failed',
+        level: 'error',
         metadata: {
           templateRef: template,
           taskId: task.taskId,
