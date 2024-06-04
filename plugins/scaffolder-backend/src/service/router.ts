@@ -95,9 +95,9 @@ import {
 } from '@backstage/plugin-auth-node';
 import { InternalTaskSecrets } from '../scaffolder/tasks/types';
 import { cloneDeep } from 'lodash';
-// TODO: Import from the common package once it's been published
-import { DefaultAuditLogger } from '../util/auditLogging';
 import { checkPermission } from '../util/checkPermissions';
+
+import { DefaultAuditLogger } from '@janus-idp/backstage-plugin-audit-log-node';
 
 /**
  *

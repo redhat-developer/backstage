@@ -3502,7 +3502,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@backstage/backend-plugin-api@workspace:^, @backstage/backend-plugin-api@workspace:packages/backend-plugin-api":
+"@backstage/backend-plugin-api@^0.6.17, @backstage/backend-plugin-api@workspace:^, @backstage/backend-plugin-api@workspace:packages/backend-plugin-api":
   version: 0.0.0-use.local
   resolution: "@backstage/backend-plugin-api@workspace:packages/backend-plugin-api"
   dependencies:
@@ -6661,6 +6661,7 @@ __metadata:
     "@backstage/plugin-scaffolder-node": "workspace:^"
     "@backstage/plugin-scaffolder-node-test-utils": "workspace:^"
     "@backstage/types": "workspace:^"
+    "@janus-idp/backstage-plugin-audit-log-node": ^1.0.2
     "@types/express": ^4.17.6
     "@types/fs-extra": ^11.0.0
     "@types/luxon": ^3.0.0
@@ -9577,6 +9578,19 @@ __metadata:
   version: 0.1.2
   resolution: "@istanbuljs/schema@npm:0.1.2"
   checksum: 5ce9facf2f0e3f4a93e56853cdfd78456e22d2c210c677530046e9c634ddc323dd62423ac711cd3554b5be06052c87fb8e0c266aa9010726940654c357290e78
+  languageName: node
+  linkType: hard
+
+"@janus-idp/backstage-plugin-audit-log-node@npm:^1.0.2":
+  version: 1.0.2
+  resolution: "@janus-idp/backstage-plugin-audit-log-node@npm:1.0.2"
+  dependencies:
+    "@backstage/backend-plugin-api": ^0.6.17
+    "@backstage/errors": ^1.2.4
+    "@backstage/types": ^1.1.1
+    express: ^4.19.2
+    lodash: ^4.17.21
+  checksum: 048eec4118bfeb5b2cfbf32b48e1bd16cfe651560a947959b884119938e3ca38001a626235b65e32bcd99445161ad526f99780d05ca9aa350c12bfee0617a572
   languageName: node
   linkType: hard
 

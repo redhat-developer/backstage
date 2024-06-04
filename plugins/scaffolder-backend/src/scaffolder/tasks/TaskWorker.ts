@@ -29,8 +29,7 @@ import { ScmIntegrations } from '@backstage/integration';
 import { assertError, stringifyError } from '@backstage/errors';
 import { PermissionEvaluator } from '@backstage/plugin-permission-common';
 
-// TODO: Import from the common package once it's been published
-import { AuditLogger } from '../../util/auditLogging';
+import { AuditLogger } from '@janus-idp/backstage-plugin-audit-log-node';
 
 /**
  * TaskWorkerOptions

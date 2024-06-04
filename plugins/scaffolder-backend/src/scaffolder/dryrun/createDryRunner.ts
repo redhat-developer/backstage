@@ -38,7 +38,7 @@ import {
   BackstageCredentials,
   resolveSafeChildPath,
 } from '@backstage/backend-plugin-api';
-import { AuditLogger } from '../../util/auditLogging';
+import { AuditLogger } from '@janus-idp/backstage-plugin-audit-log-node';
 
 interface DryRunInput {
   spec: TaskSpec;

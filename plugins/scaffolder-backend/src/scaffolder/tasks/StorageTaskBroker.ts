@@ -35,8 +35,7 @@ import {
   BackstageCredentials,
 } from '@backstage/backend-plugin-api';
 
-// TODO: Import from the common package once it's been published
-import { AuditLogger } from '../../util/auditLogging';
+import { AuditLogger } from '@janus-idp/backstage-plugin-audit-log-node';
 
 type TaskState = {
   checkpoints: {

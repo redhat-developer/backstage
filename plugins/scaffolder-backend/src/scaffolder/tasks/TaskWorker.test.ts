@@ -32,7 +32,7 @@ import { WorkflowRunner } from './types';
 import ObservableImpl from 'zen-observable';
 import waitForExpect from 'wait-for-expect';
 import { mockCredentials, mockServices } from '@backstage/backend-test-utils';
-import { DefaultAuditLogger } from '../../util/auditLogging';
+import { DefaultAuditLogger } from '@janus-idp/backstage-plugin-audit-log-node';
 
 jest.mock('./NunjucksWorkflowRunner');
 const MockedNunjucksWorkflowRunner =
