@@ -24,7 +24,7 @@ import {
 import { DatabaseTaskStore } from './DatabaseTaskStore';
 import { StorageTaskBroker, TaskManager } from './StorageTaskBroker';
 import { mockCredentials, mockServices } from '@backstage/backend-test-utils';
-import { DefaultAuditLogger } from '../../util/auditLogging';
+import { DefaultAuditLogger } from '@janus-idp/backstage-plugin-audit-log-node';
 
 async function createStore(): Promise<DatabaseTaskStore> {
   const manager = DatabaseManager.fromConfig(

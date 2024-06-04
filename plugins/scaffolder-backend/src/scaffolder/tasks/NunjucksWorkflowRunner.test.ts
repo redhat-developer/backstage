@@ -40,7 +40,7 @@ import {
   mockServices,
 } from '@backstage/backend-test-utils';
 import stripAnsi from 'strip-ansi';
-import { DefaultAuditLogger } from '../../util/auditLogging';
+import { DefaultAuditLogger } from '@janus-idp/backstage-plugin-audit-log-node';
 
 const commonAuditLogMeta = {
   status: 'succeeded',

@@ -36,7 +36,7 @@ import fs from 'fs-extra';
 import { resolveSafeChildPath } from '@backstage/backend-common';
 import { PermissionEvaluator } from '@backstage/plugin-permission-common';
 import { BackstageCredentials } from '@backstage/backend-plugin-api';
-import { AuditLogger } from '../../util/auditLogging';
+import { AuditLogger } from '@janus-idp/backstage-plugin-audit-log-node';
 
 interface DryRunInput {
   spec: TaskSpec;

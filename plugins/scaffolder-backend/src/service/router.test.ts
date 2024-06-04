@@ -47,7 +47,7 @@ import {
 } from '@backstage/plugin-permission-common';
 import { mockCredentials, mockServices } from '@backstage/backend-test-utils';
 import * as uuid from 'uuid';
-import { DefaultAuditLogger } from '../util/auditLogging';
+import { DefaultAuditLogger } from '@janus-idp/backstage-plugin-audit-log-node';
 
 jest.mock('uuid');
 const uuidSpy = jest.spyOn(uuid, 'v4');
@@ -508,7 +508,7 @@ describe('createRouter', () => {
         );
       });
 
-      it('should emit auditlog containing user identifier when backstage auth is passed', async () => {
+      it('should emit audit log containing user identifier when backstage auth is passed', async () => {
         const mockToken = mockCredentials.user.token();
         const templateParameters = {
           requiredParameter1: 'required-value-1',
@@ -1608,7 +1608,7 @@ data: {"id":1,"taskId":"a-random-id","type":"completion","createdAt":"","body":{
         );
       });
 
-      it('should emit auditlog containing user identifier when backstage auth is passed', async () => {
+      it('should emit audit log containing user identifier when backstage auth is passed', async () => {
         const mockToken = mockCredentials.user.token();
         const templateParameters = {
           requiredParameter1: 'required-value-1',

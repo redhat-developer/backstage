@@ -57,8 +57,7 @@ import { PermissionsService } from '@backstage/backend-plugin-api';
 import { loggerToWinstonLogger } from '@backstage/backend-common';
 import { BackstageLoggerTransport, WinstonLogger } from './logger';
 
-// TODO: Import from the common package once it's been published
-import { AuditLogger } from '../../util/auditLogging';
+import { AuditLogger } from '@janus-idp/backstage-plugin-audit-log-node';
 
 type NunjucksWorkflowRunnerOptions = {
   workingDirectory: string;
