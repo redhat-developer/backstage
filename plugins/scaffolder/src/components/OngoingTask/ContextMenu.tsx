@@ -30,6 +30,12 @@ import MoreVert from '@material-ui/icons/MoreVert';
 import React, { useState } from 'react';
 import { useApi } from '@backstage/core-plugin-api';
 import { scaffolderApiRef } from '@backstage/plugin-scaffolder-react';
+import { usePermission } from '@backstage/plugin-permission-react';
+import {
+  taskCancelPermission,
+  taskReadPermission,
+  taskCreatePermission,
+} from '@backstage/plugin-scaffolder-common/alpha';
 
 type ContextMenuProps = {
   cancelEnabled?: boolean;
@@ -69,6 +75,21 @@ export const ContextMenu = (props: ContextMenuProps) => {
     }
   });
 
+  const { allowed: canCancelTask } = usePermission({
+    permission: taskCancelPermission,
+  });
+
+  const { allowed: canReadTask } = usePermission({
+    permission: taskReadPermission,
+  });
+
+  const { allowed: canCreateTask } = usePermission({
+    permission: taskCreatePermission,
+  });
+
+  // Start Over endpoint requires user to have both read (to grab parameters) and create (to create new task) permissions
+  const canStartOver = canReadTask && canCreateTask;
+
   return (
     <>
       <IconButton
@@ -105,7 +126,11 @@ export const ContextMenu = (props: ContextMenuProps) => {
               primary={buttonBarVisible ? 'Hide Button Bar' : 'Show Button Bar'}
             />
           </MenuItem>
-          <MenuItem onClick={onStartOver}>
+          <MenuItem
+            onClick={onStartOver}
+            disabled={cancelEnabled || !canStartOver}
+            data-testid="start-over-task"
+          >
             <ListItemIcon>
               <Retry fontSize="small" />
             </ListItemIcon>
@@ -113,7 +138,11 @@ export const ContextMenu = (props: ContextMenuProps) => {
           </MenuItem>
           <MenuItem
             onClick={cancel}
-            disabled={!cancelEnabled || cancelStatus !== 'not-executed'}
+            disabled={
+              !cancelEnabled ||
+              cancelStatus !== 'not-executed' ||
+              !canCancelTask
+            }
             data-testid="cancel-task"
           >
             <ListItemIcon>

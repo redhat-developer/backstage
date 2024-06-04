@@ -36,6 +36,7 @@ import fs from 'fs-extra';
 import { resolveSafeChildPath } from '@backstage/backend-common';
 import { PermissionEvaluator } from '@backstage/plugin-permission-common';
 import { BackstageCredentials } from '@backstage/backend-plugin-api';
+import { AuditLogger } from '@janus-idp/backstage-plugin-audit-log-node';
 
 interface DryRunInput {
   spec: TaskSpec;
@@ -53,6 +54,7 @@ interface DryRunResult {
 /** @internal */
 export type TemplateTesterCreateOptions = {
   logger: Logger;
+  auditLogger: AuditLogger;
   integrations: ScmIntegrations;
   actionRegistry: TemplateActionRegistry;
   workingDirectory: string;
@@ -100,6 +102,7 @@ export function createDryRunner(options: TemplateTesterCreateOptions) {
       const abortSignal = new AbortController().signal;
 
       const result = await workflowRunner.execute({
+        taskId: dryRunId,
         spec: {
           ...input.spec,
           steps: [
