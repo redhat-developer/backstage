@@ -287,7 +287,7 @@ Options:
 ### `backstage-cli package test`
 
 ```
-Usage: backstage-cli [--config=<pathToConfigFile>] [TestPathPattern]
+Usage: node-20 [--config=<pathToConfigFile>] [TestPathPattern]
 
 Options:
   -h, --help
@@ -482,7 +482,7 @@ Options:
 ### `backstage-cli test`
 
 ```
-Usage: backstage-cli [--config=<pathToConfigFile>] [TestPathPattern]
+Usage: node-20 [--config=<pathToConfigFile>] [TestPathPattern]
 
 Options:
   -h, --help

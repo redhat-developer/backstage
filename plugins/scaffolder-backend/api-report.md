@@ -6,6 +6,7 @@
 /// <reference types="node" />
 
 import { ActionContext as ActionContext_2 } from '@backstage/plugin-scaffolder-node';
+import { AuditLogger } from '@janus-idp/backstage-plugin-audit-log-node';
 import { AuthService } from '@backstage/backend-plugin-api';
 import * as azure from '@backstage/plugin-scaffolder-backend-module-azure';
 import { BackstageCredentials } from '@backstage/backend-plugin-api';
@@ -361,6 +362,7 @@ export type CreateWorkerOptions = {
   integrations: ScmIntegrations;
   workingDirectory: string;
   logger: Logger;
+  auditLogger: AuditLogger;
   additionalTemplateFilters?: Record<string, TemplateFilter_2>;
   concurrentTasksLimit?: number;
   additionalTemplateGlobals?: Record<string, TemplateGlobal_2>;
@@ -553,6 +555,7 @@ export class TaskManager implements TaskContext_2 {
     storage: TaskStore,
     abortSignal: AbortSignal,
     logger: Logger,
+    auditLogger: AuditLogger,
     auth?: AuthService,
     config?: Config,
   ): TaskManager;
@@ -584,6 +587,8 @@ export class TaskManager implements TaskContext_2 {
   serializeWorkspace?(options: { path: string }): Promise<void>;
   // (undocumented)
   get spec(): TaskSpecV1beta3;
+  // (undocumented)
+  get taskId(): string;
   // (undocumented)
   updateCheckpoint?(
     options:
