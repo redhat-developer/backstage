@@ -248,14 +248,6 @@ export class NunjucksWorkflowRunner implements WorkflowRunner {
     }
 
     try {
-      if (step.if) {
-        const ifResult = this.render(step.if, context, renderTemplate);
-        if (!isTruthy(ifResult)) {
-          await stepTrack.skipFalsy();
-          return;
-        }
-      }
-
       const action: TemplateAction<JsonObject> =
         this.options.actionRegistry.get(step.action);
       const { taskLogger, streamLogger } = createStepLogger({
