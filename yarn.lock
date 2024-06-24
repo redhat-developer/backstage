@@ -3759,6 +3759,25 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@backstage/backend-plugin-api@npm:^0.6.17":
+  version: 0.6.21
+  resolution: "@backstage/backend-plugin-api@npm:0.6.21"
+  dependencies:
+    "@backstage/cli-common": ^0.1.14
+    "@backstage/config": ^1.2.0
+    "@backstage/errors": ^1.2.4
+    "@backstage/plugin-auth-node": ^0.4.16
+    "@backstage/plugin-permission-common": ^0.7.14
+    "@backstage/types": ^1.1.1
+    "@types/express": ^4.17.6
+    "@types/luxon": ^3.0.0
+    express: ^4.17.1
+    knex: ^3.0.0
+    luxon: ^3.0.0
+  checksum: d6b81036579108835cbf63fcc2c3e5a9ac684e3797d415d1ac4e26a32db72c0b0b182c098fb91e7a3219eaed2362a85d717327f69f6d2b566c3f5c6a8963c9d1
+  languageName: node
+  linkType: hard
+
 "@backstage/backend-plugin-api@workspace:^, @backstage/backend-plugin-api@workspace:packages/backend-plugin-api":
   version: 0.0.0-use.local
   resolution: "@backstage/backend-plugin-api@workspace:packages/backend-plugin-api"
@@ -3867,7 +3886,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@backstage/cli-common@workspace:^, @backstage/cli-common@workspace:packages/cli-common":
+"@backstage/cli-common@^0.1.14, @backstage/cli-common@workspace:^, @backstage/cli-common@workspace:packages/cli-common":
   version: 0.0.0-use.local
   resolution: "@backstage/cli-common@workspace:packages/cli-common"
   dependencies:
@@ -4105,7 +4124,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@backstage/config@^1.1.1, @backstage/config@workspace:^, @backstage/config@workspace:packages/config":
+"@backstage/config@^1.1.1, @backstage/config@^1.2.0, @backstage/config@workspace:^, @backstage/config@workspace:packages/config":
   version: 0.0.0-use.local
   resolution: "@backstage/config@workspace:packages/config"
   dependencies:
@@ -5079,7 +5098,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@backstage/plugin-auth-node@workspace:^, @backstage/plugin-auth-node@workspace:plugins/auth-node":
+"@backstage/plugin-auth-node@^0.4.16, @backstage/plugin-auth-node@workspace:^, @backstage/plugin-auth-node@workspace:plugins/auth-node":
   version: 0.0.0-use.local
   resolution: "@backstage/plugin-auth-node@workspace:plugins/auth-node"
   dependencies:
@@ -5584,6 +5603,7 @@ __metadata:
     "@backstage/plugin-search-backend-module-catalog": "workspace:^"
     "@backstage/repo-tools": "workspace:^"
     "@backstage/types": "workspace:^"
+    "@janus-idp/backstage-plugin-audit-log-node": ^1.1.0
     "@opentelemetry/api": ^1.3.0
     "@types/core-js": ^2.5.4
     "@types/express": ^4.17.6
@@ -6570,6 +6590,20 @@ __metadata:
     zod: ^3.22.4
   languageName: unknown
   linkType: soft
+
+"@backstage/plugin-permission-common@npm:^0.7.14":
+  version: 0.7.14
+  resolution: "@backstage/plugin-permission-common@npm:0.7.14"
+  dependencies:
+    "@backstage/config": ^1.2.0
+    "@backstage/errors": ^1.2.4
+    "@backstage/types": ^1.1.1
+    cross-fetch: ^4.0.0
+    uuid: ^9.0.0
+    zod: ^3.22.4
+  checksum: 700190c008f1c20546ef281d2c4d912fe324a252e8afcae70f93c1d467c0062d3727b0e59c87a2380a856c53422a01d1fc931c20d9aee18500bb4602a3eaf89f
+  languageName: node
+  linkType: hard
 
 "@backstage/plugin-permission-common@workspace:^, @backstage/plugin-permission-common@workspace:plugins/permission-common":
   version: 0.0.0-use.local
@@ -10085,6 +10119,19 @@ __metadata:
   version: 0.1.2
   resolution: "@istanbuljs/schema@npm:0.1.2"
   checksum: 5ce9facf2f0e3f4a93e56853cdfd78456e22d2c210c677530046e9c634ddc323dd62423ac711cd3554b5be06052c87fb8e0c266aa9010726940654c357290e78
+  languageName: node
+  linkType: hard
+
+"@janus-idp/backstage-plugin-audit-log-node@npm:^1.1.0":
+  version: 1.1.0
+  resolution: "@janus-idp/backstage-plugin-audit-log-node@npm:1.1.0"
+  dependencies:
+    "@backstage/backend-plugin-api": ^0.6.17
+    "@backstage/errors": ^1.2.4
+    "@backstage/types": ^1.1.1
+    express: ^4.19.2
+    lodash: ^4.17.21
+  checksum: 0a1c6600768c16fdc807d677cb59370e2d5e72ccfc0aa64a30686997ae032bccb48bca7b9774a94be2ce4b260f881c0191a8380e63bc1f93ce774e88d848887f
   languageName: node
   linkType: hard
 
