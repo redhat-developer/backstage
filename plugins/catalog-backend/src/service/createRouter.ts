@@ -142,7 +142,6 @@ export async function createRouter(
           ...restBody,
           credentials,
         });
-        res.status(200).end();
         await auditLogger.auditLog({
           eventName: 'CatalogEntityRefresh',
           actorId,
@@ -151,9 +150,13 @@ export async function createRouter(
           metadata: {
             entityRef: restBody.entityRef,
           },
+          response: {
+            status: 200,
+          },
           request: req,
-          message: `Refresh for ${restBody.entityRef} triggered by ${actorId}`,
+          message: `Refresh attempt for ${restBody.entityRef} triggered by ${actorId}`,
         });
+        res.status(200).end();
       } catch (err) {
         await auditLogger.auditLog({
           eventName: 'CatalogEntityRefresh',
@@ -224,7 +227,7 @@ export async function createRouter(
             response: {
               status: 200,
             },
-            message: `Entity fetch attempt initiated by ${actorId}`,
+            message: `Entity fetch attempt by ${actorId} succeeded`,
           });
 
           // TODO(freben): encode the pageInfo in the response
@@ -243,7 +246,7 @@ export async function createRouter(
                 stack: err.stack,
               },
             ],
-            message: `Entity fetch attempt initiated by ${actorId}`,
+            message: `Entity fetch attempt by ${actorId} failed`,
           });
           throw err;
         }
@@ -381,6 +384,7 @@ export async function createRouter(
             ],
             message: `Fetch attempt for entity with uid ${uid} by ${actorId} failed`,
           });
+          throw err;
         }
       })
       .delete('/entities/by-uid/:uid', async (req, res) => {
@@ -486,8 +490,8 @@ export async function createRouter(
             actorId,
             status: 'failed',
             stage: 'completion',
-            request: req,
             level: 'error',
+            request: req,
             metadata: {
               entityRef: entityRef,
             },
@@ -608,6 +612,7 @@ export async function createRouter(
             actorId,
             status: 'failed',
             stage: 'completion',
+            level: 'error',
             request: req,
             errors: [
               {
@@ -738,6 +743,7 @@ export async function createRouter(
             eventName: 'CatalogLocationFetch',
             status: 'failed',
             stage: 'completion',
+            level: 'error',
             actorId,
             request: req,
             errors: [
@@ -910,6 +916,7 @@ export async function createRouter(
             eventName: 'CatalogLocationFetch',
             status: 'failed',
             stage: 'completion',
+            level: 'error',
             actorId,
             metadata: {
               locationRef: locationRef,
@@ -930,29 +937,71 @@ export async function createRouter(
 
   if (locationAnalyzer) {
     router.post('/analyze-location', async (req, res) => {
-      const body = await validateRequestBody(
-        req,
-        z.object({
+      const actorId = await auditLogger.getActorId(req);
+
+      try {
+        await auditLogger.auditLog({
+          eventName: 'CatalogLocationAnalyze',
+          status: 'succeeded',
+          stage: 'initiation',
+          actorId,
+          request: req,
+          message: `Analyze location for location initiated by ${actorId}`,
+        });
+        const body = await validateRequestBody(
+          req,
+          z.object({
+            location: locationInput,
+            catalogFilename: z.string().optional(),
+          }),
+        );
+        const schema = z.object({
           location: locationInput,
           catalogFilename: z.string().optional(),
-        }),
-      );
-      const schema = z.object({
-        location: locationInput,
-        catalogFilename: z.string().optional(),
-      });
-      const parsedBody = schema.parse(body);
-      try {
-        const output = await locationAnalyzer.analyzeLocation(parsedBody);
-        res.status(200).json(output);
-      } catch (err) {
-        if (
-          // Catch errors from parse-url library.
-          err.name === 'Error' &&
-          'subject_url' in err
-        ) {
-          throw new InputError('The given location.target is not a URL');
+        });
+        const parsedBody = schema.parse(body);
+        try {
+          const output = await locationAnalyzer.analyzeLocation(parsedBody);
+          res.status(200).json(output);
+          await auditLogger.auditLog({
+            eventName: 'CatalogLocationAnalyze',
+            status: 'succeeded',
+            stage: 'completion',
+            actorId,
+            request: req,
+            response: {
+              status: 200,
+              body: output,
+            },
+            message: `Analyze location for location by ${actorId} succeeded`,
+          });
+        } catch (err) {
+          if (
+            // Catch errors from parse-url library.
+            err.name === 'Error' &&
+            'subject_url' in err
+          ) {
+            throw new InputError('The given location.target is not a URL');
+          }
+          throw err;
         }
+      } catch (err) {
+        await auditLogger.auditLog({
+          eventName: 'CatalogLocationAnalyze',
+          status: 'failed',
+          stage: 'completion',
+          level: 'error',
+          actorId,
+          errors: [
+            {
+              name: err.name,
+              message: err.message,
+              stack: err.stack,
+            },
+          ],
+          request: req,
+          message: `Analyze location for location by ${actorId} failed`,
+        });
         throw err;
       }
     });
@@ -960,47 +1009,103 @@ export async function createRouter(
 
   if (orchestrator) {
     router.post('/validate-entity', async (req, res) => {
-      const bodySchema = z.object({
-        entity: z.unknown(),
-        location: z.string(),
-      });
+      const actorId = await auditLogger.getActorId(req);
 
-      let body: z.infer<typeof bodySchema>;
-      let entity: Entity;
-      let location: { type: string; target: string };
       try {
-        body = await validateRequestBody(req, bodySchema);
-        entity = validateEntityEnvelope(body.entity);
-        location = parseLocationRef(body.location);
-        if (location.type !== 'url')
-          throw new TypeError(
-            `Invalid location ref ${body.location}, only 'url:<target>' is supported, e.g. url:https://host/path`,
-          );
-      } catch (err) {
-        return res.status(400).json({
-          errors: [serializeError(err)],
+        await auditLogger.auditLog({
+          eventName: 'CatalogEntityValidate',
+          status: 'succeeded',
+          stage: 'initiation',
+          actorId,
+          request: req,
+          message: `Entity validation for entity initiated by ${actorId}`,
         });
-      }
+        const bodySchema = z.object({
+          entity: z.unknown(),
+          location: z.string(),
+        });
 
-      const processingResult = await orchestrator.process({
-        entity: {
-          ...entity,
-          metadata: {
-            ...entity.metadata,
-            annotations: {
-              [ANNOTATION_LOCATION]: body.location,
-              [ANNOTATION_ORIGIN_LOCATION]: body.location,
-              ...entity.metadata.annotations,
+        let body: z.infer<typeof bodySchema>;
+        let entity: Entity;
+        let location: { type: string; target: string };
+        try {
+          body = await validateRequestBody(req, bodySchema);
+          entity = validateEntityEnvelope(body.entity);
+          location = parseLocationRef(body.location);
+          if (location.type !== 'url')
+            throw new TypeError(
+              `Invalid location ref ${body.location}, only 'url:<target>' is supported, e.g. url:https://host/path`,
+            );
+        } catch (err) {
+          return res.status(400).json({
+            errors: [serializeError(err)],
+          });
+        }
+
+        const processingResult = await orchestrator.process({
+          entity: {
+            ...entity,
+            metadata: {
+              ...entity.metadata,
+              annotations: {
+                [ANNOTATION_LOCATION]: body.location,
+                [ANNOTATION_ORIGIN_LOCATION]: body.location,
+                ...entity.metadata.annotations,
+              },
             },
           },
-        },
-      });
-
-      if (!processingResult.ok)
-        res.status(400).json({
-          errors: processingResult.errors.map(e => serializeError(e)),
         });
-      return res.status(200).end();
+
+        if (!processingResult.ok) {
+          const errors = processingResult.errors.map(e => serializeError(e));
+          res.status(400).json({
+            errors,
+          });
+          await auditLogger.auditLog({
+            eventName: 'CatalogEntityValidate',
+            status: 'failed',
+            stage: 'completion',
+            level: 'error',
+            errors: errors,
+            response: {
+              status: 400,
+            },
+            actorId,
+            request: req,
+            message: `Entity validation for entity initiated by ${actorId}`,
+          });
+        }
+        await auditLogger.auditLog({
+          eventName: 'CatalogEntityValidate',
+          status: 'succeeded',
+          stage: 'completion',
+          actorId,
+          response: {
+            status: 200,
+          },
+          request: req,
+          message: `Entity validation for entity by ${actorId} succeeded`,
+        });
+        return res.status(200).end();
+      } catch (err) {
+        await auditLogger.auditLog({
+          eventName: 'CatalogEntityValidate',
+          status: 'failed',
+          stage: 'completion',
+          level: 'error',
+          errors: [
+            {
+              name: err.name,
+              message: err.message,
+              stack: err.stack,
+            },
+          ],
+          actorId,
+          request: req,
+          message: `Entity validation for entity initiated by ${actorId} failed`,
+        });
+        throw err;
+      }
     });
   }
 
