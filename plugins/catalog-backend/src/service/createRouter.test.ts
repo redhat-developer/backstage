@@ -44,6 +44,29 @@ import { Server } from 'http';
 import { mockCredentials, mockServices } from '@backstage/backend-test-utils';
 import { LocationAnalyzer } from '../ingestion';
 
+const commonAuditLogMeta = {
+  actor: {
+    ip: '::ffff:127.0.0.1',
+    actorId: 'user:default/mock',
+    hostname: '127.0.0.1',
+  },
+  request: {
+    body: {},
+    method: 'GET',
+    params: {},
+    query: {},
+  },
+  isAuditLog: true,
+  meta: {},
+  status: 'succeeded',
+};
+const commonAuditErrorMeta = {
+  ...commonAuditLogMeta,
+  status: 'failed',
+  stage: 'completion',
+  errors: [],
+};
+
 describe('createRouter readonly disabled', () => {
   let entitiesCatalog: jest.Mocked<EntitiesCatalog>;
   let locationService: jest.Mocked<LocationService>;
@@ -51,6 +74,9 @@ describe('createRouter readonly disabled', () => {
   let app: express.Express | Server;
   let refreshService: RefreshService;
   let locationAnalyzer: jest.Mocked<LocationAnalyzer>;
+  const logger = getVoidLogger();
+  let loggerSpy: jest.SpyInstance;
+  let loggerErrorSpy: jest.SpyInstance;
 
   beforeAll(async () => {
     entitiesCatalog = {
@@ -74,11 +100,12 @@ describe('createRouter readonly disabled', () => {
     };
     refreshService = { refresh: jest.fn() };
     orchestrator = { process: jest.fn() };
+
     const router = await createRouter({
       entitiesCatalog,
       locationService,
       orchestrator,
-      logger: getVoidLogger(),
+      logger,
       refreshService,
       config: new ConfigReader(undefined),
       permissionIntegrationRouter: express.Router(),
@@ -91,6 +118,8 @@ describe('createRouter readonly disabled', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    loggerSpy = jest.spyOn(logger, 'info');
+    loggerErrorSpy = jest.spyOn(logger, 'error');
   });
 
   describe('POST /refresh', () => {
@@ -104,21 +133,82 @@ describe('createRouter readonly disabled', () => {
         entityRef: 'Component/default:foo',
         credentials: mockCredentials.user(),
       });
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogEntityRefresh',
+        request: {
+          ...commonAuditLogMeta.request,
+          body: { entityRef: 'Component/default:foo' },
+          url: '/refresh',
+          method: 'POST',
+        },
+        meta: {
+          entityRef: 'Component/default:foo',
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Refresh attempt for Component/default:foo initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Refresh attempt for Component/default:foo triggered by user:default/mock`,
+        auditLogCompletionMeta,
+      );
     });
 
     it('should support passing the token in the request body for backwards compatibility', async () => {
+      const requestBody = {
+        entityRef: 'Component/default:foo',
+        authorizationToken: mockCredentials.user.token('user:default/other'),
+      };
       const response = await request(app)
         .post('/refresh')
         .set('Content-Type', 'application/json')
-        .send({
-          entityRef: 'Component/default:foo',
-          authorizationToken: mockCredentials.user.token('user:default/other'),
-        });
+        .send(requestBody);
       expect(response.status).toBe(200);
       expect(refreshService.refresh).toHaveBeenCalledWith({
         entityRef: 'Component/default:foo',
         credentials: mockCredentials.user('user:default/other'),
       });
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogEntityRefresh',
+        request: {
+          ...commonAuditLogMeta.request,
+          body: requestBody,
+          url: '/refresh',
+          method: 'POST',
+        },
+        meta: {
+          entityRef: 'Component/default:foo',
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Refresh attempt for Component/default:foo initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Refresh attempt for Component/default:foo triggered by user:default/mock`,
+        auditLogCompletionMeta,
+      );
     });
   });
 
@@ -137,6 +227,32 @@ describe('createRouter readonly disabled', () => {
 
       expect(response.status).toEqual(200);
       expect(response.body).toEqual(entities);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogEntityFetch',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: '/entities',
+          method: 'GET',
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Entity fetch attempt initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Entity fetch attempt by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
 
     it('parses single and multiple request parameters and passes them down', async () => {
@@ -164,6 +280,35 @@ describe('createRouter readonly disabled', () => {
         },
         credentials: mockCredentials.user(),
       });
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogEntityFetch',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: '/entities?filter=a=1,a=2,b=3&filter=c=4',
+          method: 'GET',
+          query: {
+            filter: ['a=1,a=2,b=3', 'c=4'],
+          },
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Entity fetch attempt initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Entity fetch attempt by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
   });
 
