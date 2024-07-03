@@ -331,7 +331,7 @@ export async function createRouter(
         const actorId = await auditLogger.getActorId(req);
         try {
           await auditLogger.auditLog({
-            eventName: 'CatalogEntityFetch',
+            eventName: 'CatalogEntityFetchByUid',
             actorId,
             status: 'succeeded',
             stage: 'initiation',
@@ -350,7 +350,7 @@ export async function createRouter(
           }
           res.status(200).json(entities[0]);
           await auditLogger.auditLog({
-            eventName: 'CatalogEntityFetch',
+            eventName: 'CatalogEntityFetchByUid',
             actorId,
             status: 'succeeded',
             stage: 'completion',
@@ -366,7 +366,7 @@ export async function createRouter(
           });
         } catch (err) {
           await auditLogger.auditLog({
-            eventName: 'CatalogEntityFetch',
+            eventName: 'CatalogEntityFetchByUid',
             actorId,
             status: 'failed',
             stage: 'completion',
@@ -409,7 +409,7 @@ export async function createRouter(
             eventName: 'CatalogEntityDeletion',
             actorId,
             status: 'succeeded',
-            stage: 'initiation',
+            stage: 'completion',
             request: req,
             metadata: {
               uid: uid,
@@ -446,7 +446,7 @@ export async function createRouter(
         const actorId = await auditLogger.getActorId(req);
         try {
           await auditLogger.auditLog({
-            eventName: 'CatalogEntityFetch',
+            eventName: 'CatalogEntityFetchByName',
             actorId,
             status: 'succeeded',
             stage: 'initiation',
@@ -471,7 +471,7 @@ export async function createRouter(
           }
           res.status(200).json(entities[0]);
           await auditLogger.auditLog({
-            eventName: 'CatalogEntityFetch',
+            eventName: 'CatalogEntityFetchByName',
             actorId,
             status: 'succeeded',
             stage: 'completion',
@@ -486,7 +486,7 @@ export async function createRouter(
           });
         } catch (err) {
           await auditLogger.auditLog({
-            eventName: 'CatalogEntityFetch',
+            eventName: 'CatalogEntityFetchByName',
             actorId,
             status: 'failed',
             stage: 'completion',
@@ -627,12 +627,48 @@ export async function createRouter(
         }
       })
       .get('/entity-facets', async (req, res) => {
-        const response = await entitiesCatalog.facets({
-          filter: parseEntityFilterParams(req.query),
-          facets: parseEntityFacetParams(req.query),
-          credentials: await httpAuth.credentials(req),
-        });
-        res.status(200).json(response);
+        const actorId = await auditLogger.getActorId(req);
+        try {
+          await auditLogger.auditLog({
+            eventName: 'CatalogEntityFacetFetch',
+            actorId,
+            status: 'succeeded',
+            stage: 'initiation',
+            request: req,
+            message: `Entity facet fetch attempt initiated by ${actorId}`,
+          });
+          const response = await entitiesCatalog.facets({
+            filter: parseEntityFilterParams(req.query),
+            facets: parseEntityFacetParams(req.query),
+            credentials: await httpAuth.credentials(req),
+          });
+          res.status(200).json(response);
+          await auditLogger.auditLog({
+            eventName: 'CatalogEntityFacetFetch',
+            actorId,
+            status: 'succeeded',
+            stage: 'completion',
+            request: req,
+            response: { status: 200 },
+            message: `Entity facet fetch attempt by ${actorId} succeeded`,
+          });
+        } catch (err) {
+          await auditLogger.auditLog({
+            eventName: 'CatalogEntityFacetFetch',
+            actorId,
+            status: 'failed',
+            stage: 'completion',
+            request: req,
+            errors: [
+              {
+                name: err.name,
+                message: err.message,
+                stack: err.stack,
+              },
+            ],
+            message: `Entity facet fetch attempt by ${actorId} succeeded`,
+          });
+        }
       });
   }
 
@@ -655,7 +691,7 @@ export async function createRouter(
               isDryRun: dryRun,
             },
             request: req,
-            message: `Creation attempt of location entity for ${location.target}  by ${actorId} initiated`,
+            message: `Creation attempt of location entity for ${location.target} initiated by ${actorId}`,
           });
 
           // when in dryRun addLocation is effectively a read operation so we don't
@@ -685,7 +721,7 @@ export async function createRouter(
               status: 201,
               body: output,
             },
-            message: `Creation of location for ${location.target} initiated by ${actorId} succeeded`,
+            message: `Creation of location entity for ${location.target} initiated by ${actorId} succeeded`,
           });
           res.status(201).json(output);
         } catch (err) {
@@ -707,7 +743,7 @@ export async function createRouter(
               },
             ],
             request: req,
-            message: `Creation of location for ${location.target} initiated by ${actorId} failed`,
+            message: `Creation of location entity for ${location.target} initiated by ${actorId} failed`,
           });
           throw err;
         }
@@ -721,7 +757,7 @@ export async function createRouter(
             stage: 'initiation',
             actorId,
             request: req,
-            message: `Fetch attempt of locations by ${actorId} initiated`,
+            message: `Fetch attempt of locations initiated by ${actorId}`,
           });
           const locations = await locationService.listLocations({
             credentials: await httpAuth.credentials(req),
@@ -764,7 +800,7 @@ export async function createRouter(
         const actorId = await auditLogger.getActorId(req);
         try {
           await auditLogger.auditLog({
-            eventName: 'CatalogLocationFetch',
+            eventName: 'CatalogLocationFetchById',
             status: 'succeeded',
             stage: 'initiation',
             actorId,
@@ -772,14 +808,14 @@ export async function createRouter(
               id: id,
             },
             request: req,
-            message: `Fetch attempt of location with id: ${id} by ${actorId} initiated`,
+            message: `Fetch attempt of location with id: ${id} initiated by ${actorId}`,
           });
           const output = await locationService.getLocation(id, {
             credentials: await httpAuth.credentials(req),
           });
           res.status(200).json(output);
           await auditLogger.auditLog({
-            eventName: 'CatalogLocationFetch',
+            eventName: 'CatalogLocationFetchById',
             status: 'succeeded',
             stage: 'completion',
             actorId,
@@ -795,7 +831,7 @@ export async function createRouter(
           });
         } catch (err) {
           await auditLogger.auditLog({
-            eventName: 'CatalogLocationFetch',
+            eventName: 'CatalogLocationFetchById',
             status: 'failed',
             stage: 'completion',
             level: 'error',
@@ -828,7 +864,7 @@ export async function createRouter(
               id: id,
             },
             request: req,
-            message: `Deletion attempt of location with id: ${id} by ${actorId} initiated`,
+            message: `Deletion attempt of location with id: ${id} initiated by ${actorId}`,
           });
           disallowReadonlyMode(readonlyEnabled);
 
@@ -880,7 +916,7 @@ export async function createRouter(
 
         try {
           await auditLogger.auditLog({
-            eventName: 'CatalogLocationFetch',
+            eventName: 'CatalogLocationFetchByEntityRef',
             status: 'succeeded',
             stage: 'initiation',
             actorId,
@@ -888,7 +924,7 @@ export async function createRouter(
               locationRef: locationRef,
             },
             request: req,
-            message: `Fetch attempt of location ${locationRef} by ${actorId} initiated`,
+            message: `Fetch attempt for location ${locationRef} initiated by ${actorId}`,
           });
 
           const output = await locationService.getLocationByEntity(
@@ -897,7 +933,7 @@ export async function createRouter(
           );
           res.status(200).json(output);
           await auditLogger.auditLog({
-            eventName: 'CatalogLocationFetch',
+            eventName: 'CatalogLocationFetchByEntityRef',
             status: 'succeeded',
             stage: 'completion',
             actorId,
@@ -909,11 +945,11 @@ export async function createRouter(
               body: output,
             },
             request: req,
-            message: `Fetch attempt of location ${locationRef} by ${actorId} succeeded`,
+            message: `Fetch attempt for location ${locationRef} by ${actorId} succeeded`,
           });
         } catch (err) {
           await auditLogger.auditLog({
-            eventName: 'CatalogLocationFetch',
+            eventName: 'CatalogLocationFetchByEntityRef',
             status: 'failed',
             stage: 'completion',
             level: 'error',
@@ -929,7 +965,7 @@ export async function createRouter(
               },
             ],
             request: req,
-            message: `Fetch attempt of location ${locationRef} by ${actorId} failed`,
+            message: `Fetch attempt for location ${locationRef} by ${actorId} failed`,
           });
         }
       });
@@ -1058,9 +1094,6 @@ export async function createRouter(
 
         if (!processingResult.ok) {
           const errors = processingResult.errors.map(e => serializeError(e));
-          res.status(400).json({
-            errors,
-          });
           await auditLogger.auditLog({
             eventName: 'CatalogEntityValidate',
             status: 'failed',
@@ -1072,7 +1105,10 @@ export async function createRouter(
             },
             actorId,
             request: req,
-            message: `Entity validation for entity initiated by ${actorId}`,
+            message: `Entity validation for entity initiated by ${actorId} failed`,
+          });
+          return res.status(400).json({
+            errors,
           });
         }
         await auditLogger.auditLog({

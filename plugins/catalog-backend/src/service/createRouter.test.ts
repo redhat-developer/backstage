@@ -60,12 +60,6 @@ const commonAuditLogMeta = {
   meta: {},
   status: 'succeeded',
 };
-const commonAuditErrorMeta = {
-  ...commonAuditLogMeta,
-  status: 'failed',
-  stage: 'completion',
-  errors: [],
-};
 
 describe('createRouter readonly disabled', () => {
   let entitiesCatalog: jest.Mocked<EntitiesCatalog>;
@@ -117,9 +111,12 @@ describe('createRouter readonly disabled', () => {
   });
 
   beforeEach(() => {
-    jest.resetAllMocks();
     loggerSpy = jest.spyOn(logger, 'info');
     loggerErrorSpy = jest.spyOn(logger, 'error');
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
   });
 
   describe('POST /refresh', () => {
@@ -233,7 +230,6 @@ describe('createRouter readonly disabled', () => {
         request: {
           ...commonAuditLogMeta.request,
           url: '/entities',
-          method: 'GET',
         },
         stage: 'initiation',
       };
@@ -286,7 +282,6 @@ describe('createRouter readonly disabled', () => {
         request: {
           ...commonAuditLogMeta.request,
           url: '/entities?filter=a=1,a=2,b=3&filter=c=4',
-          method: 'GET',
           query: {
             filter: ['a=1,a=2,b=3', 'c=4'],
           },
@@ -333,6 +328,37 @@ describe('createRouter readonly disabled', () => {
           nextCursor: expect.any(String),
         },
       });
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'QueriedCatalogEntityFetch',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: '/entities/by-query',
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+        meta: {
+          totalEntities: 100,
+          pageInfo: {
+            nextCursor: expect.any(String),
+          },
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Queried entity fetch attempt initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Queried entity fetch attempt by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
 
     it('parses initial request', async () => {
@@ -369,6 +395,39 @@ describe('createRouter readonly disabled', () => {
         },
         credentials: mockCredentials.user(),
       });
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'QueriedCatalogEntityFetch',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: '/entities/by-query?filter=a=1,a=2,b=3&filter=c=4&orderField=metadata.name,asc&orderField=metadata.uid,desc',
+          query: {
+            filter: ['a=1,a=2,b=3', 'c=4'],
+            orderField: ['metadata.name,asc', 'metadata.uid,desc'],
+          },
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+        meta: {
+          pageInfo: {},
+          totalEntities: 0,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Queried entity fetch attempt initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Queried entity fetch attempt by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
 
     it('parses encoded params request', async () => {
@@ -409,6 +468,43 @@ describe('createRouter readonly disabled', () => {
         },
         credentials: mockCredentials.user(),
       });
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'QueriedCatalogEntityFetch',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/entities/by-query?filter=${encodeURIComponent(
+            'a=1,a=2,b=3',
+          )}&filter=c=4&orderField=${encodeURIComponent(
+            'metadata.name,asc',
+          )}&orderField=metadata.uid,desc`,
+          query: {
+            filter: ['a=1,a=2,b=3', 'c=4'],
+            orderField: ['metadata.name,asc', 'metadata.uid,desc'],
+          },
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+        meta: {
+          pageInfo: {},
+          totalEntities: 0,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Queried entity fetch attempt initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Queried entity fetch attempt by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
 
     it('parses cursor request', async () => {
@@ -438,6 +534,40 @@ describe('createRouter readonly disabled', () => {
         totalItems: 100,
         pageInfo: { nextCursor: expect.any(String) },
       });
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'QueriedCatalogEntityFetch',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/entities/by-query?cursor=${encodeCursor(cursor)}`,
+          query: {
+            cursor: `${encodeCursor(cursor)}`,
+          },
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+        meta: {
+          totalEntities: 100,
+          pageInfo: {
+            nextCursor: expect.any(String),
+          },
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Queried entity fetch attempt initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Queried entity fetch attempt by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
 
     it('parses cursor request with fullTextFilter', async () => {
@@ -480,6 +610,40 @@ describe('createRouter readonly disabled', () => {
           term: 'mySearch',
         },
       });
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'QueriedCatalogEntityFetch',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/entities/by-query?cursor=${encodeCursor(cursor)}`,
+          query: {
+            cursor: `${encodeCursor(cursor)}`,
+          },
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+        meta: {
+          totalEntities: 100,
+          pageInfo: {
+            nextCursor: expect.any(String),
+          },
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Queried entity fetch attempt initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Queried entity fetch attempt by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
 
     it('should throw in case of malformed cursor', async () => {
@@ -493,21 +657,95 @@ describe('createRouter readonly disabled', () => {
         pageInfo: { nextCursor: mockCursor() },
       });
 
+      const encodedBadCursor = `${Buffer.from(
+        JSON.stringify({ bad: 'cursor' }),
+        'utf8',
+      ).toString('base64')}`;
+
       let response = await request(app).get(
-        `/entities/by-query?cursor=${Buffer.from(
-          JSON.stringify({ bad: 'cursor' }),
-          'utf8',
-        ).toString('base64')}`,
+        `/entities/by-query?cursor=${encodedBadCursor}`,
       );
       expect(response.status).toEqual(400);
       expect(response.body.error.message).toMatch(/Malformed cursor/);
 
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'QueriedCatalogEntityFetch',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/entities/by-query?cursor=${encodedBadCursor}`,
+          query: {
+            cursor: `${encodedBadCursor}`,
+          },
+        },
+        stage: 'initiation',
+      };
+      const auditLogErrorMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        status: 'failed',
+        errors: [
+          {
+            name: 'InputError',
+            message: expect.stringContaining('Malformed cursor'),
+            stack: expect.any(String),
+          },
+        ],
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(1);
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Queried entity fetch attempt initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerErrorSpy).toHaveBeenNthCalledWith(
+        1,
+        `Queried entity fetch attempt by user:default/mock failed`,
+        auditLogErrorMeta,
+      );
+
       response = await request(app).get(`/entities/by-query?cursor=badcursor`);
       expect(response.status).toEqual(400);
       expect(response.body.error.message).toMatch(/Malformed cursor/);
+      const auditLogInitMeta2 = {
+        ...auditLogInitMeta,
+        request: {
+          ...auditLogInitMeta.request,
+          url: `/entities/by-query?cursor=badcursor`,
+          query: {
+            cursor: `badcursor`,
+          },
+        },
+      };
+      const auditLogErrorMeta2 = {
+        ...auditLogInitMeta2,
+        stage: 'completion',
+        status: 'failed',
+        errors: [
+          {
+            name: 'InputError',
+            message: expect.stringContaining('Malformed cursor'),
+            stack: expect.any(String),
+          },
+        ],
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Queried entity fetch attempt initiated by user:default/mock`,
+        auditLogInitMeta2,
+      );
+      expect(loggerErrorSpy).toHaveBeenNthCalledWith(
+        2,
+        `Queried entity fetch attempt by user:default/mock failed`,
+        auditLogErrorMeta2,
+      );
     });
 
     it('should throw in case of invalid limit', async () => {
+      // TODO(frkong): this error is thrown by the openapi-router so it does not hit the audit logging code for the endpoint
       const items: Entity[] = [
         { apiVersion: 'a', kind: 'b', metadata: { name: 'n' } },
       ];
@@ -549,6 +787,41 @@ describe('createRouter readonly disabled', () => {
       });
       expect(response.status).toEqual(200);
       expect(response.body).toEqual(expect.objectContaining(entity));
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogEntityFetchByUid',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/entities/by-uid/zzz`,
+          params: {
+            uid: 'zzz',
+          },
+        },
+        meta: {
+          uid: 'zzz',
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+        meta: {
+          uid: 'zzz',
+          entityRef: 'b:default/c',
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Fetch attempt for entity with uid zzz initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Fetch attempt for entity with uid zzz by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
 
     it('responds with a 404 for missing entities', async () => {
@@ -566,6 +839,48 @@ describe('createRouter readonly disabled', () => {
       });
       expect(response.status).toEqual(404);
       expect(response.text).toMatch(/uid/);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogEntityFetchByUid',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/entities/by-uid/zzz`,
+          params: {
+            uid: 'zzz',
+          },
+        },
+        meta: {
+          uid: 'zzz',
+        },
+        stage: 'initiation',
+      };
+      const auditLogFailureMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        status: 'failed',
+        errors: [
+          {
+            name: 'NotFoundError',
+            message: 'No entity with uid zzz',
+            stack: expect.any(String),
+          },
+        ],
+        meta: {
+          uid: 'zzz',
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(1);
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Fetch attempt for entity with uid zzz initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerErrorSpy).toHaveBeenNthCalledWith(
+        1,
+        `Fetch attempt for entity with uid zzz by user:default/mock failed`,
+        auditLogFailureMeta,
+      );
     });
   });
 
@@ -597,6 +912,39 @@ describe('createRouter readonly disabled', () => {
       });
       expect(response.status).toEqual(200);
       expect(response.body).toEqual(expect.objectContaining(entity));
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogEntityFetchByName',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/entities/by-name/k/ns/n`,
+          params: {
+            kind: 'k',
+            namespace: 'ns',
+            name: 'n',
+          },
+        },
+        meta: {
+          entityRef: 'k:ns/n',
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Fetch attempt for entity with entityRef k:ns/n initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Fetch attempt for entity with entityRef k:ns/n by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
 
     it('responds with a 404 for missing entities', async () => {
@@ -618,6 +966,48 @@ describe('createRouter readonly disabled', () => {
       });
       expect(response.status).toEqual(404);
       expect(response.text).toMatch(/name/);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogEntityFetchByName',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/entities/by-name/b/d/c`,
+          params: {
+            kind: 'b',
+            namespace: 'd',
+            name: 'c',
+          },
+        },
+        meta: {
+          entityRef: 'b:d/c',
+        },
+        stage: 'initiation',
+      };
+      const auditLogFailureMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        status: 'failed',
+        errors: [
+          {
+            name: 'NotFoundError',
+            message:
+              "No entity named 'c' found, with kind 'b' in namespace 'd'",
+            stack: expect.any(String),
+          },
+        ],
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(1);
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Fetch attempt for entity with entityRef b:d/c initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerErrorSpy).toHaveBeenNthCalledWith(
+        1,
+        `Fetch attempt for entity with entityRef b:d/c by user:default/mock failed`,
+        auditLogFailureMeta,
+      );
     });
   });
 
@@ -631,6 +1021,38 @@ describe('createRouter readonly disabled', () => {
         credentials: mockCredentials.user(),
       });
       expect(response.status).toEqual(204);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogEntityDeletion',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/entities/by-uid/apa`,
+          method: 'DELETE',
+          params: {
+            uid: 'apa',
+          },
+        },
+        meta: {
+          uid: 'apa',
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 204 },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Deletion attempt for entity with uid apa initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Deletion attempt for entity with uid apa by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
 
     it('responds with a 404 for missing entities', async () => {
@@ -644,6 +1066,47 @@ describe('createRouter readonly disabled', () => {
         credentials: mockCredentials.user(),
       });
       expect(response.status).toEqual(404);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogEntityDeletion',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/entities/by-uid/apa`,
+          method: 'DELETE',
+          params: {
+            uid: 'apa',
+          },
+        },
+        meta: {
+          uid: 'apa',
+        },
+        stage: 'initiation',
+      };
+      const auditLogFailureMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        status: 'failed',
+        meta: {},
+        errors: [
+          {
+            name: 'NotFoundError',
+            message: 'nope',
+            stack: expect.any(String),
+          },
+        ],
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(1);
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Deletion attempt for entity with uid apa initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerErrorSpy).toHaveBeenNthCalledWith(
+        1,
+        `Deletion attempt for entity with uid apa by user:default/mock failed`,
+        auditLogFailureMeta,
+      );
     });
   });
 
@@ -660,6 +1123,7 @@ describe('createRouter readonly disabled', () => {
       '{"entityRefs":[7],"fields":7}',
       '{"entityRefs":[7],"fields":[7]}',
     ])('properly rejects malformed request body, %p', async p => {
+      // TODO(frkong): These are rejected by the openapi router as well so no audit logging
       await expect(
         request(app)
           .post('/entities/by-refs')
@@ -702,6 +1166,43 @@ describe('createRouter readonly disabled', () => {
       });
       expect(response.status).toEqual(200);
       expect(response.body).toEqual({ items: [entity] });
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogEntityBatchFetch',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/entities/by-refs?filter=kind=Component`,
+          method: 'POST',
+          query: {
+            filter: ['kind=Component'],
+          },
+          body: {
+            entityRefs: [entityRef],
+            fields: ['metadata.name'],
+          },
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+        meta: {
+          entityRefs: [entityRef],
+          fields: ['metadata.name'],
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Batch entity fetch attempt initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Batch entity fetch attempt by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
   });
 
@@ -721,6 +1222,31 @@ describe('createRouter readonly disabled', () => {
       expect(response.body).toEqual([
         { data: { id: 'foo', target: 'example.com', type: 'url' } },
       ]);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogLocationFetch',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/locations`,
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Fetch attempt of locations initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Fetch attempt of locations by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
   });
 
@@ -740,11 +1266,39 @@ describe('createRouter readonly disabled', () => {
       });
 
       expect(response.status).toEqual(200);
-      expect(response.body).toEqual({
-        id: 'foo',
-        target: 'example.com',
-        type: 'url',
-      });
+      expect(response.body).toEqual(location);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogLocationFetchById',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/locations/foo`,
+          params: { id: 'foo' },
+        },
+        meta: {
+          id: 'foo',
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: {
+          status: 200,
+          body: location,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Fetch attempt of location with id: foo initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Fetch attempt of location with id: foo by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
   });
 
@@ -755,10 +1309,7 @@ describe('createRouter readonly disabled', () => {
         target: 'c',
       } as unknown as LocationInput;
 
-      const response = await request(app)
-        .post('/locations')
-
-        .send(spec);
+      const response = await request(app).post('/locations').send(spec);
 
       expect(locationService.createLocation).not.toHaveBeenCalled();
       expect(response.status).toEqual(400);
@@ -790,6 +1341,49 @@ describe('createRouter readonly disabled', () => {
           location: { id: 'a', ...spec },
         }),
       );
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogLocationCreation',
+        request: {
+          ...commonAuditLogMeta.request,
+          method: 'POST',
+          url: `/locations`,
+          body: spec,
+        },
+        meta: {
+          isDryRun: false,
+          location: { ...spec },
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: {
+          status: 201,
+          body: expect.objectContaining({
+            location: { id: 'a', ...spec },
+          }),
+        },
+        meta: {
+          isDryRun: false,
+          output: {
+            location: { id: 'a', ...spec },
+            entities: [],
+          },
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Creation attempt of location entity for c initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Creation of location entity for c initiated by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
 
     it('supports dry run', async () => {
@@ -818,6 +1412,50 @@ describe('createRouter readonly disabled', () => {
           location: { id: 'a', ...spec },
         }),
       );
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogLocationCreation',
+        request: {
+          ...commonAuditLogMeta.request,
+          method: 'POST',
+          url: `/locations?dryRun=true`,
+          query: { dryRun: 'true' },
+          body: spec,
+        },
+        meta: {
+          isDryRun: true,
+          location: { ...spec },
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: {
+          status: 201,
+          body: expect.objectContaining({
+            location: { id: 'a', ...spec },
+          }),
+        },
+        meta: {
+          isDryRun: true,
+          output: {
+            location: { id: 'a', ...spec },
+            entities: [],
+          },
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Creation attempt of location entity for c initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Creation of location entity for c initiated by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
   });
 
@@ -832,6 +1470,44 @@ describe('createRouter readonly disabled', () => {
       });
 
       expect(response.status).toEqual(204);
+
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogLocationDeletion',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/locations/foo`,
+          method: 'DELETE',
+          params: {
+            id: 'foo',
+          },
+        },
+        meta: {
+          id: 'foo',
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        meta: {
+          id: 'foo',
+        },
+        response: {
+          status: 204,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Deletion attempt of location with id: foo initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Deletion attempt of location with id: foo by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
   });
 
@@ -859,6 +1535,43 @@ describe('createRouter readonly disabled', () => {
         target: 'example.com',
         type: 'url',
       });
+
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogLocationFetchByEntityRef',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/locations/by-entity/c/ns/n`,
+          params: {
+            kind: 'c',
+            namespace: 'ns',
+            name: 'n',
+          },
+        },
+        meta: {
+          locationRef: 'c:ns/n',
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: {
+          status: 200,
+          body: location,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Fetch attempt for location c:ns/n initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Fetch attempt for location c:ns/n by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
   });
 
@@ -900,6 +1613,39 @@ describe('createRouter readonly disabled', () => {
             },
           },
         });
+
+        const auditLogInitMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'CatalogEntityValidate',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: `/validate-entity`,
+            method: 'POST',
+            body: {
+              entity,
+              location: 'url:validate-entity',
+            },
+          },
+          stage: 'initiation',
+        };
+        const auditLogCompletionMeta = {
+          ...auditLogInitMeta,
+          stage: 'completion',
+          response: {
+            status: 200,
+          },
+        };
+        expect(loggerSpy).toHaveBeenCalledTimes(2);
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
+          `Entity validation for entity initiated by user:default/mock`,
+          auditLogInitMeta,
+        );
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          2,
+          `Entity validation for entity by user:default/mock succeeded`,
+          auditLogCompletionMeta,
+        );
       });
     });
 
@@ -937,6 +1683,46 @@ describe('createRouter readonly disabled', () => {
             },
           },
         });
+        const auditLogInitMeta = {
+          ...commonAuditLogMeta,
+          eventName: 'CatalogEntityValidate',
+          request: {
+            ...commonAuditLogMeta.request,
+            url: `/validate-entity`,
+            method: 'POST',
+            body: {
+              entity,
+              location: 'url:validate-entity',
+            },
+          },
+          stage: 'initiation',
+        };
+        const auditLogFailureMeta = {
+          ...auditLogInitMeta,
+          stage: 'completion',
+          response: {
+            status: 400,
+          },
+          status: 'failed',
+          errors: [
+            {
+              name: 'Error',
+              message: 'Invalid entity name',
+            },
+          ],
+        };
+        expect(loggerSpy).toHaveBeenCalledTimes(1);
+        expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+        expect(loggerSpy).toHaveBeenNthCalledWith(
+          1,
+          `Entity validation for entity initiated by user:default/mock`,
+          auditLogInitMeta,
+        );
+        expect(loggerErrorSpy).toHaveBeenNthCalledWith(
+          1,
+          `Entity validation for entity initiated by user:default/mock failed`,
+          auditLogFailureMeta,
+        );
       });
     });
 
@@ -986,6 +1772,41 @@ describe('createRouter readonly disabled', () => {
       expect(response.body.error.message).toMatch(
         /The given location.target is not a URL/,
       );
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogLocationAnalyze',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/analyze-location`,
+          method: 'POST',
+          body: { location: { type: 'url', target: 'not a url' } },
+        },
+        stage: 'initiation',
+      };
+      const auditLogFailureMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        status: 'failed',
+        errors: [
+          {
+            name: 'InputError',
+            message: 'The given location.target is not a URL',
+            stack: expect.any(String),
+          },
+        ],
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(1);
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Analyze location for location initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerErrorSpy).toHaveBeenNthCalledWith(
+        1,
+        `Analyze location for location by user:default/mock failed`,
+        auditLogFailureMeta,
+      );
     });
   });
 });
@@ -994,6 +1815,9 @@ describe('createRouter readonly enabled', () => {
   let entitiesCatalog: jest.Mocked<EntitiesCatalog>;
   let app: express.Express;
   let locationService: jest.Mocked<LocationService>;
+  const logger = getVoidLogger();
+  let loggerSpy: jest.SpyInstance;
+  let loggerErrorSpy: jest.SpyInstance;
 
   beforeAll(async () => {
     entitiesCatalog = {
@@ -1014,7 +1838,7 @@ describe('createRouter readonly enabled', () => {
     const router = await createRouter({
       entitiesCatalog,
       locationService,
-      logger: getVoidLogger(),
+      logger,
       config: new ConfigReader({
         catalog: {
           readonly: true,
@@ -1028,6 +1852,11 @@ describe('createRouter readonly enabled', () => {
   });
 
   beforeEach(() => {
+    loggerSpy = jest.spyOn(logger, 'info');
+    loggerErrorSpy = jest.spyOn(logger, 'error');
+  });
+
+  afterEach(() => {
     jest.resetAllMocks();
   });
 
@@ -1046,6 +1875,32 @@ describe('createRouter readonly enabled', () => {
 
       expect(response.status).toEqual(200);
       expect(response.body).toEqual(entities);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogEntityFetch',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/entities`,
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+      };
+
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Entity fetch attempt initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Entity fetch attempt by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
   });
 
@@ -1058,6 +1913,39 @@ describe('createRouter readonly enabled', () => {
         credentials: mockCredentials.user(),
       });
       expect(response.status).toEqual(204);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogEntityDeletion',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/entities/by-uid/apa`,
+          method: 'DELETE',
+          params: {
+            uid: 'apa',
+          },
+        },
+        meta: {
+          uid: 'apa',
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 204 },
+      };
+
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Deletion attempt for entity with uid apa initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Deletion attempt for entity with uid apa by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
   });
 
@@ -1078,6 +1966,31 @@ describe('createRouter readonly enabled', () => {
       expect(response.body).toEqual([
         { data: { id: 'foo', target: 'example.com', type: 'url' } },
       ]);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogLocationFetch',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/locations`,
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: { status: 200 },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Fetch attempt of locations initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Fetch attempt of locations by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
   });
 
@@ -1102,6 +2015,38 @@ describe('createRouter readonly enabled', () => {
         target: 'example.com',
         type: 'url',
       });
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogLocationFetchById',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/locations/foo`,
+          params: { id: 'foo' },
+        },
+        meta: {
+          id: 'foo',
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: {
+          status: 200,
+          body: location,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Fetch attempt of location with id: foo initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Fetch attempt of location with id: foo by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
   });
 
@@ -1120,6 +2065,45 @@ describe('createRouter readonly enabled', () => {
       expect(locationService.createLocation).not.toHaveBeenCalled();
       expect(response.status).toEqual(403);
       expect(response.text).toMatch(/not allowed in readonly/);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogLocationCreation',
+        request: {
+          ...commonAuditLogMeta.request,
+          method: 'POST',
+          url: `/locations`,
+          body: spec,
+        },
+        meta: {
+          isDryRun: false,
+          location: { ...spec },
+        },
+        stage: 'initiation',
+      };
+      const auditLogErrorMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        status: 'failed',
+        errors: [
+          {
+            name: 'NotAllowedError',
+            message: 'This operation not allowed in readonly mode',
+            stack: expect.any(String),
+          },
+        ],
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(1);
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Creation attempt of location entity for c initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerErrorSpy).toHaveBeenNthCalledWith(
+        1,
+        `Creation of location entity for c initiated by user:default/mock failed`,
+        auditLogErrorMeta,
+      );
     });
 
     it('supports dry run', async () => {
@@ -1148,6 +2132,50 @@ describe('createRouter readonly enabled', () => {
           location: { id: 'a', ...spec },
         }),
       );
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogLocationCreation',
+        request: {
+          ...commonAuditLogMeta.request,
+          method: 'POST',
+          url: `/locations?dryRun=true`,
+          query: { dryRun: 'true' },
+          body: spec,
+        },
+        meta: {
+          isDryRun: true,
+          location: { ...spec },
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: {
+          status: 201,
+          body: expect.objectContaining({
+            location: { id: 'a', ...spec },
+          }),
+        },
+        meta: {
+          isDryRun: true,
+          output: {
+            location: { id: 'a', ...spec },
+            entities: [],
+          },
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Creation attempt of location entity for c initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Creation of location entity for c initiated by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
   });
 
@@ -1156,6 +2184,46 @@ describe('createRouter readonly enabled', () => {
       const response = await request(app).delete('/locations/foo');
       expect(locationService.deleteLocation).not.toHaveBeenCalled();
       expect(response.status).toEqual(403);
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogLocationDeletion',
+        request: {
+          ...commonAuditLogMeta.request,
+          method: 'DELETE',
+          url: `/locations/foo`,
+          params: {
+            id: 'foo',
+          },
+        },
+        meta: {
+          id: 'foo',
+        },
+        stage: 'initiation',
+      };
+      const auditLogErrorMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        status: 'failed',
+        errors: [
+          {
+            name: 'NotAllowedError',
+            message: 'This operation not allowed in readonly mode',
+            stack: expect.any(String),
+          },
+        ],
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(1);
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Deletion attempt of location with id: foo initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerErrorSpy).toHaveBeenNthCalledWith(
+        1,
+        `Deletion attempt of location with id: foo by user:default/mock failed`,
+        auditLogErrorMeta,
+      );
     });
   });
 
@@ -1183,6 +2251,42 @@ describe('createRouter readonly enabled', () => {
         target: 'example.com',
         type: 'url',
       });
+      const auditLogInitMeta = {
+        ...commonAuditLogMeta,
+        eventName: 'CatalogLocationFetchByEntityRef',
+        request: {
+          ...commonAuditLogMeta.request,
+          url: `/locations/by-entity/c/ns/n`,
+          params: {
+            kind: 'c',
+            namespace: 'ns',
+            name: 'n',
+          },
+        },
+        meta: {
+          locationRef: 'c:ns/n',
+        },
+        stage: 'initiation',
+      };
+      const auditLogCompletionMeta = {
+        ...auditLogInitMeta,
+        stage: 'completion',
+        response: {
+          status: 200,
+          body: location,
+        },
+      };
+      expect(loggerSpy).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        1,
+        `Fetch attempt for location c:ns/n initiated by user:default/mock`,
+        auditLogInitMeta,
+      );
+      expect(loggerSpy).toHaveBeenNthCalledWith(
+        2,
+        `Fetch attempt for location c:ns/n by user:default/mock succeeded`,
+        auditLogCompletionMeta,
+      );
     });
   });
 });
