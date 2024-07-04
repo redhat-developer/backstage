@@ -44,11 +44,14 @@ import { Server } from 'http';
 import { mockCredentials, mockServices } from '@backstage/backend-test-utils';
 import { LocationAnalyzer } from '@backstage/plugin-catalog-node';
 
+const localhostNames = ['localhost', '127.0.0.1', '::1', '::ffff:127.0.0.1'];
+const localhostIps = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+
 const commonAuditLogMeta = {
   actor: {
-    ip: '::ffff:127.0.0.1',
+    ip: expect.stringMatching(new RegExp(localhostIps.join('|'))),
     actorId: 'user:default/mock',
-    hostname: '127.0.0.1',
+    hostname: expect.stringMatching(new RegExp(localhostNames.join('|'))),
   },
   request: {
     body: {},
