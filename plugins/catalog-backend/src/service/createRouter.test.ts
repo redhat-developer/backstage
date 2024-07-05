@@ -1017,7 +1017,19 @@ describe('createRouter readonly disabled', () => {
   describe('DELETE /entities/by-uid/:uid', () => {
     it('can remove', async () => {
       entitiesCatalog.removeEntityByUid.mockResolvedValue(undefined);
-
+      entitiesCatalog.entities.mockResolvedValue({
+        entities: [
+          {
+            apiVersion: 'v1',
+            kind: 'k',
+            metadata: {
+              name: 'n',
+              namespace: 'ns',
+            },
+          },
+        ],
+        pageInfo: { hasNextPage: false },
+      });
       const response = await request(app).delete('/entities/by-uid/apa');
       expect(entitiesCatalog.removeEntityByUid).toHaveBeenCalledTimes(1);
       expect(entitiesCatalog.removeEntityByUid).toHaveBeenCalledWith('apa', {
@@ -1037,6 +1049,7 @@ describe('createRouter readonly disabled', () => {
         },
         meta: {
           uid: 'apa',
+          entityRef: 'k:ns/n',
         },
         stage: 'initiation',
       };
@@ -1062,7 +1075,10 @@ describe('createRouter readonly disabled', () => {
       entitiesCatalog.removeEntityByUid.mockRejectedValue(
         new NotFoundError('nope'),
       );
-
+      entitiesCatalog.entities.mockResolvedValue({
+        entities: [],
+        pageInfo: { hasNextPage: false },
+      });
       const response = await request(app).delete('/entities/by-uid/apa');
       expect(entitiesCatalog.removeEntityByUid).toHaveBeenCalledTimes(1);
       expect(entitiesCatalog.removeEntityByUid).toHaveBeenCalledWith('apa', {
@@ -1465,7 +1481,11 @@ describe('createRouter readonly disabled', () => {
   describe('DELETE /locations', () => {
     it('deletes the location', async () => {
       locationService.deleteLocation.mockResolvedValueOnce(undefined);
-
+      locationService.getLocation.mockResolvedValueOnce({
+        id: 'joo',
+        target: 'test',
+        type: 'url',
+      });
       const response = await request(app).delete('/locations/foo');
       expect(locationService.deleteLocation).toHaveBeenCalledTimes(1);
       expect(locationService.deleteLocation).toHaveBeenCalledWith('foo', {
@@ -1494,7 +1514,11 @@ describe('createRouter readonly disabled', () => {
         ...auditLogInitMeta,
         stage: 'completion',
         meta: {
-          id: 'foo',
+          location: {
+            id: 'joo',
+            target: 'test',
+            type: 'url',
+          },
         },
         response: {
           status: 204,
@@ -1910,6 +1934,19 @@ describe('createRouter readonly enabled', () => {
   describe('DELETE /entities/by-uid/:uid', () => {
     // this delete is allowed as there is no other way to remove entities
     it('is allowed', async () => {
+      entitiesCatalog.entities.mockResolvedValue({
+        entities: [
+          {
+            apiVersion: 'v1',
+            kind: 'k',
+            metadata: {
+              name: 'n',
+              namespace: 'ns',
+            },
+          },
+        ],
+        pageInfo: { hasNextPage: false },
+      });
       const response = await request(app).delete('/entities/by-uid/apa');
       expect(entitiesCatalog.removeEntityByUid).toHaveBeenCalledTimes(1);
       expect(entitiesCatalog.removeEntityByUid).toHaveBeenCalledWith('apa', {
@@ -1929,6 +1966,7 @@ describe('createRouter readonly enabled', () => {
         },
         meta: {
           uid: 'apa',
+          entityRef: 'k:ns/n',
         },
         stage: 'initiation',
       };

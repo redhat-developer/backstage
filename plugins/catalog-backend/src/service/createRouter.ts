@@ -390,7 +390,16 @@ export async function createRouter(
       .delete('/entities/by-uid/:uid', async (req, res) => {
         const { uid } = req.params;
         const actorId = await auditLogger.getActorId(req);
+        let entityRef: string | undefined;
         try {
+          // Get the entityRef of the UID so users can more easily identity the entity
+          const { entities } = await entitiesCatalog.entities({
+            filter: basicEntityFilter({ 'metadata.uid': uid }),
+            credentials: await httpAuth.credentials(req),
+          });
+          if (entities.length) {
+            entityRef = stringifyEntityRef(entities[0]);
+          }
           await auditLogger.auditLog({
             eventName: 'CatalogEntityDeletion',
             actorId,
@@ -399,6 +408,7 @@ export async function createRouter(
             request: req,
             metadata: {
               uid: uid,
+              entityRef: entityRef,
             },
             message: `Deletion attempt for entity with uid ${uid} initiated by ${actorId}`,
           });
@@ -413,6 +423,7 @@ export async function createRouter(
             request: req,
             metadata: {
               uid: uid,
+              entityRef: entityRef,
             },
             response: {
               status: 204,
@@ -867,7 +878,10 @@ export async function createRouter(
             message: `Deletion attempt of location with id: ${id} initiated by ${actorId}`,
           });
           disallowReadonlyMode(readonlyEnabled);
-
+          // Grabbing the information of the location begin deleted
+          const location = await locationService.getLocation(id, {
+            credentials: await httpAuth.credentials(req),
+          });
           await locationService.deleteLocation(id, {
             credentials: await httpAuth.credentials(req),
           });
@@ -877,7 +891,7 @@ export async function createRouter(
             stage: 'completion',
             actorId,
             metadata: {
-              id: id,
+              location,
             },
             response: {
               status: 204,
