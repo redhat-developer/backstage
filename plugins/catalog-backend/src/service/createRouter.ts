@@ -677,8 +677,9 @@ export async function createRouter(
                 stack: err.stack,
               },
             ],
-            message: `Entity facet fetch attempt by ${actorId} succeeded`,
+            message: `Entity facet fetch attempt by ${actorId} failed`,
           });
+          throw err;
         }
       });
   }
@@ -860,6 +861,7 @@ export async function createRouter(
             request: req,
             message: `Fetch attempt of location with id: ${id} by ${actorId} failed`,
           });
+          throw err;
         }
       })
       .delete('/locations/:id', async (req, res) => {
@@ -981,6 +983,7 @@ export async function createRouter(
             request: req,
             message: `Fetch attempt for location ${locationRef} by ${actorId} failed`,
           });
+          throw err;
         }
       });
   }
