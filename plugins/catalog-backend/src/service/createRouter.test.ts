@@ -1345,10 +1345,7 @@ describe('createRouter readonly disabled', () => {
         entities: [],
       });
 
-      const response = await request(app)
-        .post('/locations')
-
-        .send(spec);
+      const response = await request(app).post('/locations').send(spec);
 
       expect(locationService.createLocation).toHaveBeenCalledTimes(1);
       expect(locationService.createLocation).toHaveBeenCalledWith(spec, false, {
@@ -1380,16 +1377,10 @@ describe('createRouter readonly disabled', () => {
         stage: 'completion',
         response: {
           status: 201,
-          body: expect.objectContaining({
-            location: { id: 'a', ...spec },
-          }),
         },
         meta: {
           isDryRun: false,
-          output: {
-            location: { id: 'a', ...spec },
-            entities: [],
-          },
+          location: { id: 'a', ...spec },
         },
       };
       expect(loggerSpy).toHaveBeenCalledTimes(2);
@@ -1418,7 +1409,6 @@ describe('createRouter readonly disabled', () => {
 
       const response = await request(app)
         .post('/locations?dryRun=true')
-
         .send(spec);
 
       expect(locationService.createLocation).toHaveBeenCalledTimes(1);
@@ -1452,16 +1442,10 @@ describe('createRouter readonly disabled', () => {
         stage: 'completion',
         response: {
           status: 201,
-          body: expect.objectContaining({
-            location: { id: 'a', ...spec },
-          }),
         },
         meta: {
           isDryRun: true,
-          output: {
-            location: { id: 'a', ...spec },
-            entities: [],
-          },
+          location: { id: 'a', ...spec },
         },
       };
       expect(loggerSpy).toHaveBeenCalledTimes(2);
@@ -2098,10 +2082,7 @@ describe('createRouter readonly enabled', () => {
         target: 'c',
       };
 
-      const response = await request(app)
-        .post('/locations')
-
-        .send(spec);
+      const response = await request(app).post('/locations').send(spec);
 
       expect(locationService.createLocation).not.toHaveBeenCalled();
       expect(response.status).toEqual(403);
@@ -2194,16 +2175,10 @@ describe('createRouter readonly enabled', () => {
         stage: 'completion',
         response: {
           status: 201,
-          body: expect.objectContaining({
-            location: { id: 'a', ...spec },
-          }),
         },
         meta: {
           isDryRun: true,
-          output: {
-            location: { id: 'a', ...spec },
-            entities: [],
-          },
+          location: { id: 'a', ...spec },
         },
       };
       expect(loggerSpy).toHaveBeenCalledTimes(2);

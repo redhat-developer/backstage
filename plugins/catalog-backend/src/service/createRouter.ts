@@ -725,13 +725,12 @@ export async function createRouter(
             stage: 'completion',
             actorId,
             metadata: {
-              output: output,
+              location: output.location,
               isDryRun: dryRun,
             },
             request: req,
             response: {
               status: 201,
-              body: output,
             },
             message: `Creation of location entity for ${location.target} initiated by ${actorId} succeeded`,
           });
