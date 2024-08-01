@@ -117,7 +117,8 @@ Example cURL Request being used:
 ```bash
 curl -X POST localhost:7007/api/scaffolder/v2/tasks \
         -H "Authorization: Bearer ${BACKSTAGE_TOKEN}" \
-        -H "Content-Type: application/json" \        --data '{"templateRef":"template:default/test-template", "values": {"username": "user", "password": "******"}, "secrets": { "password": "secret" }}'
+        -H "Content-Type: application/json" \
+        --data '{"templateRef":"template:default/test-template", "values": {"username": "user", "password": "******"}, "secrets": { "password": "secret" }}'
 ```
 
 Example of a prettified version of the Audit Log of the scaffolder task being successfully created:
