@@ -91,3 +91,108 @@ some example entities.
 
 - [catalog](https://github.com/backstage/backstage/tree/master/plugins/catalog)
   is the frontend interface for this plugin.
+
+## Audit Logging
+
+This package supports audit logging for the endpoints. Audit logs will provide the following information:
+
+- `eventName`: The event associated with the audit log, see the [audited events](#audit-log-events) for the list of events that are audited
+- `actor`: An object containing information about the actor who triggered the event being audited. Contains the following fields:
+  - `actorId`: The name/id/`entityRef` of the associated backstage user or service. Can be `null` if default auth policy is disabled, and endpoints are accessed with an unauthenticated user.
+  - `ip`: The IP address of the actor (optional)
+  - `hostname`: The hostname of the actor (optional)
+  - `client`: The user agent of the actor (optional)
+- `stage`: The stage the event was at when the audit log was generated. In the case of the `catalog-backend`, it is either `initiation` or `completion`
+- `status`: Whether the event `succeeded` or `failed`
+- `meta`: An optional object containing event specific data. Ex: `entityRef` for an entity request might be a field in this metadata object
+- `request`: An optional field that contains information about the HTTP request sent to an endpoint. Contains the following fields:
+  - `method`: The HTTP method of the request
+  - `query`: The `query` fields of the request
+  - `params`: The `params` fields of the request
+  - `body`: The request `body`
+  - `url`: The endpoint url of the request.
+- `response`: An optional field that contains information about the HTTP response sent from an endpoint. Contains the following fields:
+  - `status`: The status code of the HTTP response
+  - `body`: The contents of the request body
+- `isAuditLog`: A flag set to `true` to differentiate audit logs from normal logs. Always `true` for audit logs.
+- `errors`: A list of errors containing the `name`, `message` and potentially the `stack` field of the error. Only appears when `status` is `failed`.
+
+#### Audit Log Events
+
+The following are the events that are audit logged:
+
+- `CatalogEntityAncestryFetch`: Tracks `GET` requests to the `/entities/by-name/:kind/:namespace/:name/ancestry` endpoint which return the ancestry of an entity
+- `CatalogEntityBatchFetch`: Tracks `POST` requests to the `/entities/by-refs` endpoint which return a batch of entities
+- `CatalogEntityDeletion`: Tracks `DELETE` requests to the `/entities/by-uid/:uid` endpoint which delete an entity. Note: this will not be a permanent deletion and the entity will be restored if the parent location is still present in the catalog
+- `CatalogEntityFacetFetch`: Tracks `GET` requests to the `/entity-facets` endpoint which return the facets of an entity
+- `CatalogEntityFetch`: Tracks `GET` requests to the `/entities` endpoint which returns a list of entities
+- `CatalogEntityFetchByName`: Tracks `GET` requests to the `/entities/by-name/:kind/:namespace/:name` endpoint which return an entity matching the specified entity ref
+- `CatalogEntityFetchByUid`: Tracks `GET` requests to the `/entities/by-uid/:uid` endpoint which return an entity matching the specified entity uid
+- `CatalogEntityRefresh`: Tracks `POST` requests to the `/entities/refresh` endpoint which schedules the specified entity to be refreshed
+- `CatalogEntityValidate`: Tracks `POST` requests to the `/entities/validate` endpoint which validates the specified entity
+- `CatalogLocationAnalyze`: Tracks `POST` requests to the `/locations/analyze` endpoint which analyzes the specified location
+- `CatalogLocationCreation`: Tracks `POST` requests to the `/locations` endpoint which creates a location
+- `CatalogLocationDeletion`: Tracks `DELETE` requests to the `/locations/:id` endpoint which deletes a location as well as all child entities associated with it
+- `CatalogLocationFetch`: Tracks `GET` requests to the `/locations` endpoint which returns a list of locations
+- `CatalogLocationFetchByEntityRef`: Tracks `GET` requests to the `/locations/by-entity` endpoint which returns a list of locations associated with the specified entity ref
+- `CatalogLocationFetchById`: Tracks `GET` requests to the `/locations/:id` endpoint which returns a location matching the specified location id
+- `QueriedCatalogEntityFetch`: Tracks `GET` requests to the `/entities/by-query` endpoint which returns a list of entities matching the specified query
+
+#### Example Audit Log Output
+
+The following is an example audit log when a user creates a location with the `POST /locations` endpoint:
+
+Example cURL Request being used:
+
+```bash
+curl -X POST localhost:7007/api/catalog/locations \
+      -H "Authorization: Bearer ${BACKSTAGE_TOKEN}" \
+      -H "Content-Type: application/json" \
+      --data '{"type":"url", "target":"https://github.com/backstage/backstage/blob/master/plugins/catalog-backend/catalog-info.yaml"}'
+```
+
+Example of a prettified version of the Audit Log of the location being successfully created:
+
+```json
+{
+  "actor": {
+    "actorId": "user:development/guest",
+    "hostname": "localhost",
+    "ip": "::1",
+    "userAgent": "curl/8.2.1"
+  },
+  "eventName": "CatalogLocationCreation",
+  "isAuditLog": true,
+  "level": "info",
+  "message": "Creation of location entity for https://github.com/backstage/backstage/blob/master/plugins/catalog-backend/catalog-info.yaml initiated by user:development/guest succeeded",
+  "meta": {
+    "isDryRun": false,
+    "location": {
+      "id": "4a73775b-c632-4789-8a87-c70006794979",
+      "target": "https://github.com/backstage/backstage/blob/master/plugins/catalog-backend/catalog-info.yaml",
+      "type": "url"
+    }
+  },
+  "plugin": "catalog",
+  "request": {
+    "body": {
+      "target": "https://github.com/backstage/backstage/blob/master/plugins/catalog-backend/catalog-info.yaml",
+      "type": "url"
+    },
+    "method": "POST",
+    "params": {},
+    "query": {},
+    "url": "/api/catalog/locations"
+  },
+  "response": {
+    "status": 201
+  },
+  "service": "backstage",
+  "span_id": "6ad39b002b2838ec",
+  "stage": "completion",
+  "status": "succeeded",
+  "timestamp": "2024-08-01 10:54:50",
+  "trace_flags": "01",
+  "trace_id": "010a768196471f78d7ddae817c582c7b"
+}
+```
