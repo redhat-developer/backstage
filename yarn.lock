@@ -46002,12 +46002,12 @@ __metadata:
   linkType: hard
 
 "xml-crypto@npm:^3.0.1":
-  version: 3.2.0
-  resolution: "xml-crypto@npm:3.2.0"
+  version: 3.2.1
+  resolution: "xml-crypto@npm:3.2.1"
   dependencies:
     "@xmldom/xmldom": ^0.8.8
     xpath: 0.0.32
-  checksum: 6c4974a7518307ea006dcfc1405f61c6738b45574b4d9d1e62f53b602bfcf894d34017f99d618f26f67c40a5e6d78e6228116ded2768b2ca5b2df5c8bf7774b7
+  checksum: 82baad2e9f31747e03b4a986b170b4caf4e8fbe3ad296808726d0aeea30b1844d7700d0731cb64312530e273f70a385f293c184416446a3dab254e114cc8db83
   languageName: node
   linkType: hard
 
