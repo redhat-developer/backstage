@@ -106,8 +106,8 @@ __metadata:
   linkType: hard
 
 "@apollo/explorer@npm:^3.0.0":
-  version: 3.6.0
-  resolution: "@apollo/explorer@npm:3.6.0"
+  version: 3.7.3
+  resolution: "@apollo/explorer@npm:3.7.3"
   dependencies:
     "@types/whatwg-mimetype": ^3.0.0
     graphql-ws: ^5.9.0
@@ -115,8 +115,8 @@ __metadata:
     whatwg-mimetype: ^3.0.0
     zen-observable-ts: ^1.1.0
   peerDependencies:
-    react: ^16.8.0 || ^17.0.0 || ^18.0.0
-    react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0
+    react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+    react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
     use-deep-compare-effect: ^1.8.1
   peerDependenciesMeta:
     react:
@@ -125,7 +125,7 @@ __metadata:
       optional: true
     use-deep-compare-effect:
       optional: true
-  checksum: 0617cd1995cb8a63e25ee93204e09f6210a9031ca7942a7c74b9ac74677072fd6242d1479110d9a756c013589626706766380788e9b07dc63a18b494f581406c
+  checksum: c8f4d14357c3ca0f1a106f3cb7ca9caf855b47107b91b4ad0508ca5cd7792f9ef0cab82ae31a14fd4b286759350cda50ba8ab6e8d900f8be713afaeb0aaa3635
   languageName: node
   linkType: hard
 
