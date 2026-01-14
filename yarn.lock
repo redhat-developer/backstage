@@ -3684,7 +3684,7 @@ __metadata:
     css-loader: ^6.5.1
     ctrlc-windows: ^2.1.0
     del: ^7.0.0
-    diff: ^5.0.0
+    diff: ^8.0.3
     esbuild: ^0.20.0
     esbuild-loader: ^4.0.0
     eslint: ^8.6.0
@@ -25561,6 +25561,13 @@ __metadata:
   version: 5.2.0
   resolution: "diff@npm:5.2.0"
   checksum: 12b63ca9c36c72bafa3effa77121f0581b4015df18bc16bac1f8e263597735649f1a173c26f7eba17fb4162b073fee61788abe49610e6c70a2641fe1895443fd
+  languageName: node
+  linkType: hard
+
+"diff@npm:^8.0.3":
+  version: 8.0.3
+  resolution: "diff@npm:8.0.3"
+  checksum: 397f6f7a93d8622e8748805ebaad35dfbbdd0a5fe03722b0905aee2662b1ccf82728f90e9f975a20e8406b1df46c28bd1958b42fc5cb03fb202d4cb93251e15d
   languageName: node
   linkType: hard
 
