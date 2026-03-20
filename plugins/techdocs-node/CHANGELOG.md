@@ -1,7 +1,5 @@
 # @backstage/plugin-techdocs-node
 
-<<<<<<< HEAD
-=======
 ## 1.13.11
 
 ### Patch Changes
@@ -135,7 +133,6 @@
   - @backstage/integration@1.18.0-next.0
   - @backstage/backend-plugin-api@1.4.3-next.0
 
->>>>>>> 66e08b08f9 (chore: push release)
 ## 1.13.6
 
 ### Patch Changes
