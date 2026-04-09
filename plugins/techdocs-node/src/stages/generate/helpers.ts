@@ -303,7 +303,6 @@ export const ALLOWED_MKDOCS_KEYS = new Set([
   'validation',
   // Deprecated
   'google_analytics',
-  'INHERIT',
 ]);
 
 /**
